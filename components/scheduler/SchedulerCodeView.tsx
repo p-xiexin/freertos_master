@@ -2,17 +2,15 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Code2, FileCode, Layers, Zap, Terminal } from 'lucide-react';
 import { TASKS_C_CODE, getLedTaskCode, getUartTaskCode, ISR_CODE } from '../../data/schedulerData';
-import { SchedulerConfig } from '../../chapters/Scheduler';
 
 interface SchedulerCodeViewProps {
   activeTabOverride?: string; 
   activeLine: number | null;
   height: number;
   uartLog?: string;
-  config: SchedulerConfig;
 }
 
-const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ activeTabOverride, activeLine, height, uartLog, config }) => {
+const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ activeTabOverride, activeLine, height, uartLog }) => {
   const [activeTab, setActiveTab] = useState<'kernel' | 'led' | 'uart' | 'isr' | 'log'>('kernel');
   const scrollRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -41,8 +39,8 @@ const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ activeTabOverride
   const getCode = () => {
     switch(activeTab) {
         case 'kernel': return TASKS_C_CODE;
-        case 'led': return getLedTaskCode(config.ledDelay);
-        case 'uart': return getUartTaskCode(config.uartDelay);
+        case 'led': return getLedTaskCode(4);
+        case 'uart': return getUartTaskCode(2);
         case 'isr': return ISR_CODE;
         default: return [];
     }

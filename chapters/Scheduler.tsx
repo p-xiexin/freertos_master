@@ -12,13 +12,6 @@ const INITIAL_TASKS: SimTask[] = [
     { id: 0, name: "Idle Task", priority: 0, state: 'READY', color: 'bg-slate-500', wakeTick: 0 },
 ];
 
-export interface SchedulerConfig {
-    ledPriority: number;
-    ledDelay: number;
-    uartPriority: number;
-    uartDelay: number;
-}
-
 type CodeTab = 'kernel' | 'led' | 'uart' | 'isr';
 
 type ProgramLine = {
@@ -35,13 +28,13 @@ const TASK_PROGRAMS: Record<number, ProgramLine[]> = {
     1: [
         { tab: 'led', line: 6, cycles: 1, label: "LED: HAL_GPIO_TogglePin" },
         { tab: 'led', line: 9, cycles: 3, label: "LED: Busy loop (preemptible)" },
-        { tab: 'led', line: 12, cycles: 1, label: "vTaskDelay...", resetTo: 0 }, // Label handled dynamically
+        { tab: 'led', line: 12, cycles: 1, label: (tick) => `vTaskDelay(4) @ tick ${tick}`, resetTo: 0 },
     ],
     2: [
         { tab: 'uart', line: 6, cycles: 1, label: "taskENTER_CRITICAL()" },
         { tab: 'uart', line: 8, cycles: 2, label: (tick) => `printf("Tick: ${tick}")` },
         { tab: 'uart', line: 10, cycles: 1, label: "taskEXIT_CRITICAL()" },
-        { tab: 'uart', line: 12, cycles: 1, label: "vTaskDelay...", resetTo: 0 }, // Label handled dynamically
+        { tab: 'uart', line: 12, cycles: 1, label: (tick) => `vTaskDelay(2) @ tick ${tick}`, resetTo: 0 },
     ],
     0: [
         { tab: 'kernel', line: null, cycles: 1, label: "Idle: wait for next tick" }
@@ -55,14 +48,6 @@ const buildInitialPointers = (): PointerState => ({
 });
 
 const Scheduler: React.FC = () => {
-  // --- Config State ---
-  const [config, setConfig] = useState<SchedulerConfig>({
-      ledPriority: 2,
-      ledDelay: 4,
-      uartPriority: 1,
-      uartDelay: 2
-  });
-
   const [tickCount, setTickCount] = useState(0);
   const [tasks, setTasks] = useState<SimTask[]>(JSON.parse(JSON.stringify(INITIAL_TASKS)));
   const [currentTaskId, setCurrentTaskId] = useState(0);
@@ -76,7 +61,7 @@ const Scheduler: React.FC = () => {
   const [taskPointers, setTaskPointers] = useState<PointerState>(buildInitialPointers);
   const [activeCode, setActiveCode] = useState<{ tab: CodeTab; line: number | null }>({ tab: 'kernel', line: 5 });
 
-  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [sidebarWidth, setSidebarWidth] = useState(280);
   const [bottomHeight, setBottomHeight] = useState(300);
 
   // --- Refs for up-to-date values (avoid stale closures) ---
@@ -86,9 +71,9 @@ const Scheduler: React.FC = () => {
   const pendingRef = useRef(pendingInterrupt);
   const isrRef = useRef(isExecutingISR);
   const taskPointersRef = useRef(taskPointers);
+  const isrTimers = useRef<number[]>([]);
   const fastRef = useRef(isFastForwarding);
   const currentTaskRef = useRef(currentTaskId);
-  const configRef = useRef(config);
 
   useEffect(() => { tickRef.current = tickCount; }, [tickCount]);
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
@@ -98,16 +83,6 @@ const Scheduler: React.FC = () => {
   useEffect(() => { taskPointersRef.current = taskPointers; }, [taskPointers]);
   useEffect(() => { fastRef.current = isFastForwarding; }, [isFastForwarding]);
   useEffect(() => { currentTaskRef.current = currentTaskId; }, [currentTaskId]);
-  useEffect(() => { configRef.current = config; }, [config]);
-
-  // --- Apply Priorities from Config ---
-  useEffect(() => {
-      setTasks(prev => prev.map(t => {
-          if (t.id === 1) return { ...t, priority: config.ledPriority };
-          if (t.id === 2) return { ...t, priority: config.uartPriority };
-          return t;
-      }));
-  }, [config.ledPriority, config.uartPriority]);
 
   const applyTaskState = useCallback((nextTasks: SimTask[]) => {
       setTasks(nextTasks);
@@ -162,13 +137,7 @@ const Scheduler: React.FC = () => {
       const step = program[pointer.pc];
 
       setActiveCode({ tab: step.tab, line: step.line });
-      
-      // Dynamic Logging
-      let logText = typeof step.label === 'function' ? step.label(tickNow) : step.label;
-      if (step.line === 12) {
-          const delay = taskId === 1 ? configRef.current.ledDelay : configRef.current.uartDelay;
-          logText = `vTaskDelay(${delay}) @ tick ${tickNow}`;
-      }
+      const logText = typeof step.label === 'function' ? step.label(tickNow) : step.label;
       setStatusLog(logText);
 
       const onLineEnd = () => {
@@ -176,7 +145,7 @@ const Scheduler: React.FC = () => {
           if (taskId === 2 && step.line === 10) setCriticalNesting(c => Math.max(0, c - 1));
           if (taskId === 2 && step.line === 8) setUartLog(prev => prev + `Tick: ${tickNow}\n`);
           if (taskId !== 0 && step.line === 12) {
-              const delay = taskId === 1 ? configRef.current.ledDelay : configRef.current.uartDelay;
+              const delay = taskId === 2 ? 2 : 4;
               blockTask(taskId, delay, tickNow);
           }
       };
@@ -195,27 +164,40 @@ const Scheduler: React.FC = () => {
   }, [blockTask]);
 
   const handleImmediateISR = useCallback((tickNow: number) => {
+      // Visualize ISR quickly with staged steps (does not consume tick time)
+      const STEP_MS = 200;
+      isrTimers.current.forEach(id => clearTimeout(id));
+      isrTimers.current = [];
+
       setIsExecutingISR(true);
       isrRef.current = true;
       setActiveCode({ tab: 'isr', line: 1 });
-      setStatusLog(`ISR: EXTI0_IRQHandler (instant) @ tick ${tickNow}`);
-      setTimeout(() => {
+      setStatusLog(`ISR Entry @ tick ${tickNow}`);
+
+      isrTimers.current.push(window.setTimeout(() => {
+          setActiveCode({ tab: 'isr', line: 7 });
+          setStatusLog("ISR: Clear EXTI flag");
+      }, STEP_MS));
+
+      isrTimers.current.push(window.setTimeout(() => {
+          setActiveCode({ tab: 'isr', line: 10 });
+          setStatusLog("ISR: portYIELD_FROM_ISR()");
+      }, STEP_MS * 2));
+
+      isrTimers.current.push(window.setTimeout(() => {
           setIsExecutingISR(false);
           isrRef.current = false;
           setStatusLog("ISR complete -> request context switch");
-      }, 0);
+      }, STEP_MS * 3));
   }, []);
 
   const handleReset = useCallback(() => {
       setIsRunning(false);
       setTickCount(0);
       tickRef.current = 0;
-      // Reset tasks but respect current config priorities
-      const resetTasks = JSON.parse(JSON.stringify(INITIAL_TASKS)).map((t: SimTask) => {
-          if (t.id === 1) return { ...t, priority: configRef.current.ledPriority };
-          if (t.id === 2) return { ...t, priority: configRef.current.uartPriority };
-          return t;
-      });
+      isrTimers.current.forEach(id => clearTimeout(id));
+      isrTimers.current = [];
+      const resetTasks = JSON.parse(JSON.stringify(INITIAL_TASKS));
       applyTaskState(resetTasks);
       setCurrentTaskId(0);
       currentTaskRef.current = 0;
@@ -277,14 +259,17 @@ const Scheduler: React.FC = () => {
       setActiveCode({ tab: 'kernel', line: 5 });
       setStatusLog(`SysTick: xTickCount=${tickNow}`);
 
+      // Wake tasks in tick ISR
       const afterWake = wakeBlockedTasks(tickNow);
 
+      // Handle pending interrupt if not masked
       if (pendingRef.current && criticalRef.current === 0 && !isrRef.current) {
           handleImmediateISR(tickNow);
           setPendingInterrupt(false);
           pendingRef.current = false;
       }
 
+      // Decide next task (post-tick scheduling point)
       const nextId = scheduleNext(afterWake);
       if (nextId !== currentTaskRef.current) {
           markRunning(afterWake, nextId);
@@ -293,6 +278,7 @@ const Scheduler: React.FC = () => {
           setStatusLog(prev => `${prev} | Switch to ${tasksRef.current.find(t => t.id === nextId)?.name ?? 'Idle'}`);
       }
 
+      // CPU runs between ticks for a small slice; does not move xTickCount
       const CYCLES_PER_TICK = isManualStep ? 1 : 3;
       runCpuSlice(tickNow, CYCLES_PER_TICK);
 
@@ -367,7 +353,6 @@ const Scheduler: React.FC = () => {
                 activeLine={codeState.line}
                 height={bottomHeight}
                 uartLog={uartLog}
-                config={config}
             />
         </div>
 
@@ -385,8 +370,6 @@ const Scheduler: React.FC = () => {
             criticalNesting={criticalNesting}
             pendingInterrupt={pendingInterrupt}
             isExecutingISR={isExecutingISR}
-            config={config}
-            setConfig={setConfig}
         />
         
     </div>

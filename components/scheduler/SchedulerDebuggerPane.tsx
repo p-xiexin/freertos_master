@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
-import { Bug, GripVertical, Layers, Zap, ShieldAlert } from 'lucide-react';
+import { Bug, GripVertical, Layers, Zap, ShieldAlert, Activity, Terminal } from 'lucide-react';
 import { Reorder, useDragControls } from 'framer-motion';
 import CollapsibleSection from '../CollapsibleSection';
 import { SimTask } from '../../data/schedulerData';
+import { SchedulerConfig } from '../../chapters/Scheduler';
 
 interface SchedulerDebuggerPaneProps {
   tickCount: number;
@@ -13,12 +14,31 @@ interface SchedulerDebuggerPaneProps {
   criticalNesting: number;
   pendingInterrupt: boolean;
   isExecutingISR: boolean;
+  config: SchedulerConfig;
+  setConfig: React.Dispatch<React.SetStateAction<SchedulerConfig>>;
 }
 
 const DebugRow = ({ label, value, color = "text-slate-400", animate = false }: { label: string, value: string | number, color?: string, animate?: boolean }) => (
     <div className="flex justify-between items-center text-xs py-1 border-b border-slate-800/50 last:border-0">
         <span className="text-slate-500 font-bold">{label}</span>
         <span className={`font-mono ${color} ${animate ? 'animate-pulse' : ''}`}>{value}</span>
+    </div>
+);
+
+const ConfigSlider = ({ label, value, min, max, onChange, colorClass }: { label: string, value: number, min: number, max: number, onChange: (val: number) => void, colorClass: string }) => (
+    <div className="mb-3">
+        <div className="flex justify-between items-center mb-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">{label}</span>
+            <span className={`text-xs font-mono font-bold ${colorClass}`}>{value}</span>
+        </div>
+        <input 
+            type="range" 
+            min={min} 
+            max={max} 
+            value={value} 
+            onChange={(e) => onChange(parseInt(e.target.value))}
+            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
+        />
     </div>
 );
 
@@ -33,6 +53,7 @@ const DraggableSection: React.FC<{ item: string; children: React.ReactNode }> = 
         >
             <CollapsibleSection 
                 title={
+                    item === 'config' ? "System Configuration" :
                     item === 'stats' ? "System Status" : 
                     item === 'lists' ? "Ready Lists Inspection" : 
                     "Scheduling Principles"
@@ -46,9 +67,9 @@ const DraggableSection: React.FC<{ item: string; children: React.ReactNode }> = 
 };
 
 const SchedulerDebuggerPane: React.FC<SchedulerDebuggerPaneProps> = ({ 
-    tickCount, currentTaskId, tasks, width, criticalNesting, pendingInterrupt, isExecutingISR
+    tickCount, currentTaskId, tasks, width, criticalNesting, pendingInterrupt, isExecutingISR, config, setConfig
 }) => {
-  const [items, setItems] = useState(["stats", "lists", "principles"]);
+  const [items, setItems] = useState(["config", "stats", "lists", "principles"]);
   
   const currentTaskName = isExecutingISR ? "ISR (Hardware)" : (tasks.find(t => t.id === currentTaskId)?.name || "Switching...");
   const readyCounts = [0, 1, 2, 3, 4].map(p => tasks.filter(t => t.priority === p && t.state === 'READY').length);
@@ -67,6 +88,43 @@ const SchedulerDebuggerPane: React.FC<SchedulerDebuggerPaneProps> = ({
          <Reorder.Group axis="y" values={items} onReorder={setItems} className="space-y-2">
              
              {items.map(item => {
+                 if (item === 'config') return (
+                     <DraggableSection key={item} item={item}>
+                         <div className="px-1 py-1">
+                             <div className="mb-4">
+                                 <div className="flex items-center gap-2 mb-2 text-rose-400 font-bold text-xs border-b border-rose-500/20 pb-1">
+                                     <Activity size={12} /> LED Task
+                                 </div>
+                                 <ConfigSlider 
+                                    label="Priority" value={config.ledPriority} min={0} max={4} 
+                                    onChange={(v) => setConfig(prev => ({...prev, ledPriority: v}))}
+                                    colorClass="text-rose-400"
+                                 />
+                                 <ConfigSlider 
+                                    label="Block Time (Ticks)" value={config.ledDelay} min={2} max={20} 
+                                    onChange={(v) => setConfig(prev => ({...prev, ledDelay: v}))}
+                                    colorClass="text-slate-200"
+                                 />
+                             </div>
+                             
+                             <div>
+                                 <div className="flex items-center gap-2 mb-2 text-indigo-400 font-bold text-xs border-b border-indigo-500/20 pb-1">
+                                     <Terminal size={12} /> UART Task
+                                 </div>
+                                 <ConfigSlider 
+                                    label="Priority" value={config.uartPriority} min={0} max={4} 
+                                    onChange={(v) => setConfig(prev => ({...prev, uartPriority: v}))}
+                                    colorClass="text-indigo-400"
+                                 />
+                                 <ConfigSlider 
+                                    label="Block Time (Ticks)" value={config.uartDelay} min={2} max={20} 
+                                    onChange={(v) => setConfig(prev => ({...prev, uartDelay: v}))}
+                                    colorClass="text-slate-200"
+                                 />
+                             </div>
+                         </div>
+                     </DraggableSection>
+                 );
                  if (item === 'stats') return (
                      <DraggableSection key={item} item={item}>
                         <div className="px-1">

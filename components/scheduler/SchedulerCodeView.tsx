@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { Code2, FileCode, Layers, Zap, Terminal } from 'lucide-react';
-import { TASKS_C_CODE, LED_TASK_CODE, UART_TASK_CODE, ISR_CODE } from '../../data/schedulerData';
+import { TASKS_C_CODE, getLedTaskCode, getUartTaskCode, ISR_CODE } from '../../data/schedulerData';
 
 interface SchedulerCodeViewProps {
   activeTabOverride?: string; 
@@ -39,8 +39,8 @@ const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ activeTabOverride
   const getCode = () => {
     switch(activeTab) {
         case 'kernel': return TASKS_C_CODE;
-        case 'led': return LED_TASK_CODE;
-        case 'uart': return UART_TASK_CODE;
+        case 'led': return getLedTaskCode(4);
+        case 'uart': return getUartTaskCode(2);
         case 'isr': return ISR_CODE;
         default: return [];
     }

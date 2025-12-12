@@ -18,7 +18,7 @@ const DebugRow = ({ label, value, color = "text-slate-400" }: { label: string, v
 );
 
 // Wrapper to isolate drag controls for each item
-const DraggableSection = ({ item, children }: { item: string, children: React.ReactNode }) => {
+const DraggableSection: React.FC<{ item: string; children: React.ReactNode }> = ({ item, children }) => {
     const controls = useDragControls();
     return (
         <Reorder.Item 

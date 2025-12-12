@@ -33,7 +33,7 @@ const VariableRow = ({ name, value, type, changed }: { name: string, value: Reac
 );
 
 // Wrapper for reordering
-const DraggableSection = ({ item, children }: { item: string, children: React.ReactNode }) => {
+const DraggableSection: React.FC<{ item: string; children: React.ReactNode }> = ({ item, children }) => {
     const controls = useDragControls();
     return (
         <Reorder.Item 

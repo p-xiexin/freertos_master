@@ -17,7 +17,7 @@ export const TASKS_C_CODE = [
     { line: 15, text: "}", type: 'plain' }
 ];
 
-export const LED_TASK_CODE = [
+export const getLedTaskCode = (delay: number) => [
     { line: 1, text: "void vLEDTask( void *pvParameters )", type: 'func' },
     { line: 2, text: "{", type: 'plain' },
     { line: 3, text: "    for( ;; )", type: 'keyword' },
@@ -28,13 +28,13 @@ export const LED_TASK_CODE = [
     { line: 8, text: "        // 2. Heavy work (Interruptible)", type: 'comment' },
     { line: 9, text: "        for(int i=0; i<500; i++);", type: 'code' },
     { line: 10, text: "        ", type: 'plain' },
-    { line: 11, text: "        // 3. Block for 4 ticks", type: 'comment' },
-    { line: 12, text: "        vTaskDelay( 4 );", type: 'call' },
+    { line: 11, text: `        // 3. Block for ${delay} ticks`, type: 'comment' },
+    { line: 12, text: `        vTaskDelay( ${delay} );`, type: 'call' },
     { line: 13, text: "    }", type: 'plain' },
     { line: 14, text: "}", type: 'plain' }
 ];
 
-export const UART_TASK_CODE = [
+export const getUartTaskCode = (delay: number) => [
     { line: 1, text: "void vUARTTask( void *pvParameters )", type: 'func' },
     { line: 2, text: "{", type: 'plain' },
     { line: 3, text: "    for( ;; )", type: 'keyword' },
@@ -46,7 +46,7 @@ export const UART_TASK_CODE = [
     { line: 9, text: "        }", type: 'plain' },
     { line: 10, text: "        taskEXIT_CRITICAL();", type: 'macro' },
     { line: 11, text: "", type: 'plain' },
-    { line: 12, text: "        vTaskDelay( 2 );", type: 'call' },
+    { line: 12, text: `        vTaskDelay( ${delay} );`, type: 'call' },
     { line: 13, text: "    }", type: 'plain' },
     { line: 14, text: "}", type: 'plain' }
 ];

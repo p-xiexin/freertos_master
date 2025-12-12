@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Bug, GripVertical, Activity, Layers, List, BookOpen, Clock, Zap, ShieldAlert } from 'lucide-react';
+import { Bug, GripVertical, Layers, Zap, ShieldAlert } from 'lucide-react';
 import { Reorder, useDragControls } from 'framer-motion';
 import CollapsibleSection from '../CollapsibleSection';
 import { SimTask } from '../../data/schedulerData';
@@ -10,7 +10,6 @@ interface SchedulerDebuggerPaneProps {
   currentTaskId: number;
   tasks: SimTask[];
   width: number;
-  // New props
   criticalNesting: number;
   pendingInterrupt: boolean;
   isExecutingISR: boolean;
@@ -23,7 +22,7 @@ const DebugRow = ({ label, value, color = "text-slate-400", animate = false }: {
     </div>
 );
 
-const DraggableSection = ({ item, children }: { item: string, children: React.ReactNode }) => {
+const DraggableSection: React.FC<{ item: string; children: React.ReactNode }> = ({ item, children }) => {
     const controls = useDragControls();
     return (
         <Reorder.Item 
@@ -36,7 +35,6 @@ const DraggableSection = ({ item, children }: { item: string, children: React.Re
                 title={
                     item === 'stats' ? "System Status" : 
                     item === 'lists' ? "Ready Lists Inspection" : 
-                    item === 'tcbs' ? "Task Control Blocks" :
                     "Scheduling Principles"
                 }
                 prefix={<div onPointerDown={(e) => controls.start(e)}><GripVertical size={14} /></div>}
@@ -50,12 +48,11 @@ const DraggableSection = ({ item, children }: { item: string, children: React.Re
 const SchedulerDebuggerPane: React.FC<SchedulerDebuggerPaneProps> = ({ 
     tickCount, currentTaskId, tasks, width, criticalNesting, pendingInterrupt, isExecutingISR
 }) => {
-  const [items, setItems] = useState(["stats", "lists", "tcbs", "principles"]);
+  const [items, setItems] = useState(["stats", "lists", "principles"]);
   
   const currentTaskName = isExecutingISR ? "ISR (Hardware)" : (tasks.find(t => t.id === currentTaskId)?.name || "Switching...");
-  const readyCounts = [0, 1, 2].map(p => tasks.filter(t => t.priority === p && t.state === 'READY').length);
-  const blockedCount = tasks.filter(t => t.state === 'BLOCKED').length;
-
+  const readyCounts = [0, 1, 2, 3, 4].map(p => tasks.filter(t => t.priority === p && t.state === 'READY').length);
+  
   return (
     <div 
       style={{ width }} 
@@ -79,7 +76,7 @@ const SchedulerDebuggerPane: React.FC<SchedulerDebuggerPaneProps> = ({
                             <DebugRow label="Interrupt Status" value={pendingInterrupt ? "PENDING" : "ACTIVE"} color={pendingInterrupt ? "text-red-400" : "text-slate-500"} animate={pendingInterrupt}/>
                             <div className="mt-2 text-[10px] flex items-center gap-2 bg-slate-800 p-1.5 rounded">
                                 <ShieldAlert size={12} className={criticalNesting > 0 ? "text-yellow-500" : "text-slate-600"}/>
-                                <span className={criticalNesting > 0 ? "text-yellow-200" : "text-slate-500"}>
+                                <span className="text-yellow-200">
                                     {criticalNesting > 0 ? "INTERRUPTS DISABLED (PRIMASK=1)" : "Interrupts Enabled (PRIMASK=0)"}
                                 </span>
                             </div>
@@ -93,14 +90,14 @@ const SchedulerDebuggerPane: React.FC<SchedulerDebuggerPaneProps> = ({
                                 <Zap size={14} className="text-red-500 mt-0.5 shrink-0"/>
                                 <div>
                                     <strong className="text-red-400 block mb-1">Preemption (抢占)</strong>
-                                    <p>硬件中断 (ISR) 拥有最高优先级。LED 任务可随时被打断，因为其操作（Toggle）通常是原子的或不敏感的。</p>
+                                    <p>当高优先级任务变为 Ready 状态（例如延时结束），调度器会立即打断低优先级任务。</p>
                                 </div>
                             </div>
                             <div className="flex items-start gap-2">
-                                <ShieldAlert size={14} className="text-yellow-500 mt-0.5 shrink-0"/>
+                                <Layers size={14} className="text-sky-500 mt-0.5 shrink-0"/>
                                 <div>
-                                    <strong className="text-yellow-400 block mb-1">Reentrancy (重入性)</strong>
-                                    <p>UART 任务使用 <code>printf</code>，这是不可重入函数。必须使用临界区保护，防止在打印过程中被中断打断并再次调用打印。</p>
+                                    <strong className="text-sky-400 block mb-1">Time Slicing</strong>
+                                    <p>调度器以 Tick 为单位分配时间片。空闲任务或其他任务在 Tick 中断中被唤醒并重新评估优先级。</p>
                                 </div>
                             </div>
                         </div>
@@ -112,15 +109,14 @@ const SchedulerDebuggerPane: React.FC<SchedulerDebuggerPaneProps> = ({
                         <div className="space-y-1 pt-1">
                              <div className="text-[10px] uppercase font-bold text-slate-500">Ready Lists</div>
                              {readyCounts.map((c, i) => (
-                                 <div key={i} className="flex justify-between text-[10px] pl-2 text-slate-400">
+                                 <div key={i} className={`flex justify-between text-[10px] pl-2 ${c>0 ? 'text-sky-300 font-bold' : 'text-slate-600'}`}>
                                      <span>Priority {i}</span>
-                                     <span className={c>0?"text-sky-400":"text-slate-600"}>{c}</span>
+                                     <span>{c}</span>
                                  </div>
                              ))}
                         </div>
                     </DraggableSection>
                  );
-                 // ... keep other sections if needed, simplified for brevity here
                  return null;
              })}
          </Reorder.Group>

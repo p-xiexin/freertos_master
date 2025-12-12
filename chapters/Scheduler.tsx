@@ -71,6 +71,7 @@ const Scheduler: React.FC = () => {
   const pendingRef = useRef(pendingInterrupt);
   const isrRef = useRef(isExecutingISR);
   const taskPointersRef = useRef(taskPointers);
+  const isrTimers = useRef<number[]>([]);
   const fastRef = useRef(isFastForwarding);
   const currentTaskRef = useRef(currentTaskId);
 
@@ -163,22 +164,39 @@ const Scheduler: React.FC = () => {
   }, [blockTask]);
 
   const handleImmediateISR = useCallback((tickNow: number) => {
-      // One-shot ISR: does not consume tick time, just requests a reschedule
+      // Visualize ISR quickly with staged steps (does not consume tick time)
+      const STEP_MS = 200;
+      isrTimers.current.forEach(id => clearTimeout(id));
+      isrTimers.current = [];
+
       setIsExecutingISR(true);
       isrRef.current = true;
       setActiveCode({ tab: 'isr', line: 1 });
-      setStatusLog(`ISR: EXTI0_IRQHandler (instant) @ tick ${tickNow}`);
-      setTimeout(() => {
+      setStatusLog(`ISR Entry @ tick ${tickNow}`);
+
+      isrTimers.current.push(window.setTimeout(() => {
+          setActiveCode({ tab: 'isr', line: 7 });
+          setStatusLog("ISR: Clear EXTI flag");
+      }, STEP_MS));
+
+      isrTimers.current.push(window.setTimeout(() => {
+          setActiveCode({ tab: 'isr', line: 10 });
+          setStatusLog("ISR: portYIELD_FROM_ISR()");
+      }, STEP_MS * 2));
+
+      isrTimers.current.push(window.setTimeout(() => {
           setIsExecutingISR(false);
           isrRef.current = false;
           setStatusLog("ISR complete -> request context switch");
-      }, 0);
+      }, STEP_MS * 3));
   }, []);
 
   const handleReset = useCallback(() => {
       setIsRunning(false);
       setTickCount(0);
       tickRef.current = 0;
+      isrTimers.current.forEach(id => clearTimeout(id));
+      isrTimers.current = [];
       const resetTasks = JSON.parse(JSON.stringify(INITIAL_TASKS));
       applyTaskState(resetTasks);
       setCurrentTaskId(0);

@@ -41,14 +41,10 @@ const Visualizer: React.FC<VisualizerProps> = ({ step, setStep, nextStep, prevSt
       
       <DebugToolbar 
         onReset={reset}
-        onPrev={prevStep}
         onNext={nextStep}
-        onFinish={() => setStep(TOTAL_STEPS - 1)}
         isPlaying={isPlaying}
         onTogglePlay={togglePlay}
-        canPrev={step > 0}
         canNext={step < TOTAL_STEPS - 1}
-        canFinish={step < TOTAL_STEPS - 1}
       />
 
       {/* Background Grid */}

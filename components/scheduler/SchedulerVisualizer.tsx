@@ -110,8 +110,7 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
   }, []);
 
   return (
-    <div ref={containerRef} className="flex-1 bg-[#09090b] relative overflow-hidden flex flex-col font-sans select-none">
-       
+    <div ref={containerRef} className="flex-1 bg-slate-950 relative overflow-hidden flex flex-col font-sans select-none">       
        {/* === PCB Layer === */}
        <div className="absolute inset-0 z-0 pointer-events-none">
             {/* Grid */}
@@ -135,10 +134,6 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
                         <path d="M0,0 L0,6 L9,3 z" fill="#ef4444" />
                     </marker>
                 </defs>
-
-                {/* Standard Traces (Fixed decor) */}
-                <path d="M 300 150 L 380 150 L 380 300 L 450 300" fill="none" stroke="#1e293b" strokeWidth="2" />
-                <path d="M 650 300 L 750 300 L 750 200 L 800 200" fill="none" stroke="#1e293b" strokeWidth="2" />
                 
                 {/* DYNAMIC INTERRUPT LINE */}
                 {interruptPath && (

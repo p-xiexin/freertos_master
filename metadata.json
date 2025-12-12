@@ -1,0 +1,5 @@
+{
+  "name": "FreeRTOS 交互式大师课",
+  "description": "一个用于学习 FreeRTOS 核心概念（包括任务调度、队列、信号量和内存管理）的交互式动画教育平台。",
+  "requestFramePermissions": []
+}

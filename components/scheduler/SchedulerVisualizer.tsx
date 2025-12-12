@@ -73,19 +73,22 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
             const btn = btnWrapperRef.current.getBoundingClientRect();
             const cpu = cpuRef.current.getBoundingClientRect();
 
-            // Calculate coordinates relative to the container
-            const startX = (btn.left + btn.width / 2) - cont.left;
-            const startY = btn.top - cont.top; // Connect to top of button
+            // Button is 64px (w-16), so radius is 32px.
+            // It is the first element in the wrapper.
+            const btnRadius = 32;
+            const btnCenterX = btn.left + btn.width / 2;
+            const btnCenterY = btn.top + btnRadius;
+
+            // Start from the RIGHT side of the button
+            const startX = btnCenterX + btnRadius - cont.left;
+            const startY = btnCenterY - cont.top;
             
-            // Target the bottom-left area of the CPU
-            const endX = (cpu.left + 40) - cont.left; 
+            // Target the bottom-center of the CPU
+            const endX = (cpu.left + cpu.width / 2) - cont.left; 
             const endY = cpu.bottom - cont.top; 
 
-            // Create a PCB-style trace (Manhattan routing)
-            // Go UP from button, then RIGHT, then UP to CPU bottom
-            const midY = startY - 60;
-
-            const path = `M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+            // Create a path: Right -> Up
+            const path = `M ${startX} ${startY} L ${endX} ${startY} L ${endX} ${endY}`;
             setInterruptPath(path);
         }
     };

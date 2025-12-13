@@ -1,10 +1,11 @@
 
 import React, { useState } from 'react';
-import { BookOpen, Cpu, Layers, GitMerge, Menu, ExternalLink } from 'lucide-react';
+import { BookOpen, Cpu, Layers, GitMerge, Menu, ArrowRightLeft, ExternalLink } from 'lucide-react';
 import Intro from './chapters/Intro';
 import TaskLifecycle from './chapters/TaskLifecycle';
 import Queues from './chapters/Queues';
 import Scheduler from './chapters/Scheduler';
+import ContextSwitching from './chapters/ContextSwitching';
 import AIChat from './components/AIChat';
 import { ChapterId } from './types';
 
@@ -16,6 +17,7 @@ function App() {
   const chapters = [
     { id: ChapterId.INTRO, title: '课程简介', icon: BookOpen, component: Intro },
     { id: ChapterId.TASKS, title: '任务管理', icon: Cpu, component: TaskLifecycle },
+    { id: ChapterId.CONTEXT, title: '上下文切换', icon: ArrowRightLeft, component: ContextSwitching },
     { id: ChapterId.SCHEDULER, title: '任务调度器', icon: Layers, component: Scheduler },
     { id: ChapterId.QUEUES, title: '队列与通信', icon: GitMerge, component: Queues },
   ];
@@ -26,6 +28,7 @@ function App() {
   // These chapters use the new 3-pane dashboard layout and need full screen space
   const isFullPage = [
     ChapterId.TASKS, 
+    ChapterId.CONTEXT, 
     ChapterId.QUEUES, 
     ChapterId.SCHEDULER
   ].includes(activeChapter);
@@ -53,7 +56,7 @@ function App() {
         {/* Sidebar Header */}
         <div 
           onClick={() => setDesktopCollapsed(!isDesktopCollapsed)}
-          className={`h-16 flex items-center border-b border-slate-800 shrink-0 cursor-pointer hover:bg-slate-800/80 transition-colors ${isDesktopCollapsed ? 'justify-center' : 'px-6'}`}
+          className={`h-16 flex items-center border-b border-slate-800 shrink-0 cursor-pointer hover:bg-slate-800/50 transition-colors ${isDesktopCollapsed ? 'justify-center' : 'px-6'}`}
           title={isDesktopCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
           {!isDesktopCollapsed ? (

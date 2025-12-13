@@ -1,11 +1,13 @@
 
 import React, { useState } from 'react';
-import { BookOpen, Cpu, Layers, GitMerge, Menu, ArrowRightLeft, ExternalLink } from 'lucide-react';
+import { BookOpen, Cpu, Layers, GitMerge, Menu, ArrowRightLeft, ExternalLink, Key, ShieldAlert } from 'lucide-react';
 import Intro from './chapters/Intro';
 import TaskLifecycle from './chapters/TaskLifecycle';
 import Queues from './chapters/Queues';
 import Scheduler from './chapters/Scheduler';
 import ContextSwitching from './chapters/ContextSwitching';
+import Semaphores from './chapters/Semaphores';
+import PriorityInversion from './chapters/PriorityInversion';
 import AIChat from './components/AIChat';
 import { ChapterId } from './types';
 
@@ -20,6 +22,8 @@ function App() {
     { id: ChapterId.CONTEXT, title: '上下文切换', icon: ArrowRightLeft, component: ContextSwitching },
     { id: ChapterId.SCHEDULER, title: '任务调度器', icon: Layers, component: Scheduler },
     { id: ChapterId.QUEUES, title: '队列与通信', icon: GitMerge, component: Queues },
+    { id: ChapterId.SEMAPHORES, title: '信号量与同步', icon: Key, component: Semaphores },
+    { id: ChapterId.INVERSION, title: '优先级反转', icon: ShieldAlert, component: PriorityInversion },
   ];
 
   const ActiveComponent = chapters.find(c => c.id === activeChapter)?.component || Intro;
@@ -30,7 +34,9 @@ function App() {
     ChapterId.TASKS, 
     ChapterId.CONTEXT, 
     ChapterId.QUEUES, 
-    ChapterId.SCHEDULER
+    ChapterId.SCHEDULER,
+    ChapterId.SEMAPHORES,
+    ChapterId.INVERSION
   ].includes(activeChapter);
 
   return (

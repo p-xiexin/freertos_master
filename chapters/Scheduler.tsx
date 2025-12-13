@@ -7,7 +7,7 @@ import DraggableHandle from '../components/DraggableHandle';
 import { SimTask } from '../data/schedulerData';
 
 const INITIAL_TASKS: SimTask[] = [
-    { id: 1, name: "LED Task", priority: 2, state: 'READY', color: 'bg-rose-500', wakeTick: 0 },
+    { id: 1, name: "LED Task", priority: 2, state: 'RUNNING', color: 'bg-rose-500', wakeTick: 0 },
     { id: 2, name: "UART Task", priority: 1, state: 'READY', color: 'bg-indigo-500', wakeTick: 0 },
     { id: 0, name: "Idle Task", priority: 0, state: 'READY', color: 'bg-slate-500', wakeTick: 0 },
 ];
@@ -145,6 +145,7 @@ const Scheduler: React.FC = () => {
   const tasksRef = useRef(tasks);
   const criticalRef = useRef(criticalNesting);
   const currentTaskRef = useRef(currentTaskId);
+  const userStepCountRef = useRef(0);
 
   // Sync Refs
   useEffect(() => { tickRef.current = tickCount; }, [tickCount]);
@@ -244,13 +245,14 @@ const Scheduler: React.FC = () => {
           const nextPc = userLine.resetTo ?? ((pc + 1) % program.length);
           setUserPointers(prev => ({ ...prev, [taskId]: nextPc }));
 
-          // Randomly trigger SysTick (Simulate Timer Interrupt)
-          // Every few steps, we force a SysTick if interrupts enabled
-          if (criticalRef.current === 0 && Math.random() > 0.6) {
+          // Deterministic SysTick: Every 4 user steps
+          userStepCountRef.current += 1;
+          if (criticalRef.current === 0 && userStepCountRef.current >= 4) {
+              userStepCountRef.current = 0;
               setMode('KERNEL');
               setKernelSeqId('SYSTICK_ENTRY');
               setKernelPc(0);
-              setStatusLog("Interrupt: SysTick Fired!");
+              setStatusLog("Interrupt: SysTick Fired! (Time Slice)");
           }
           return;
       }
@@ -326,10 +328,6 @@ const Scheduler: React.FC = () => {
           else if (step.branch === 'CHECK_EMPTY') {
                const tasksToWake = tasksRef.current.filter(t => t.state === 'BLOCKED' && t.wakeTick <= tickRef.current);
                // Since we unblock one at a time in 'UNBLOCK' action, check if any left
-               // Note: The previous step 'UNBLOCK' might have just cleared the last one.
-               // We need to check 'state' in refs.
-               // Actually, simpler: if we just unblocked one, we might loop again?
-               // Let's rely on finding one.
                const stillHas = tasksRef.current.some(t => t.state === 'BLOCKED' && t.wakeTick <= tickRef.current);
                if (stillHas) {
                    nextSeq = 'INC_TICK_UNBLOCK';
@@ -397,6 +395,7 @@ const Scheduler: React.FC = () => {
       setUserPointers({ 0: 0, 1: 0, 2: 0 });
       setKernelSeqId('SYSTICK_ENTRY');
       setKernelPc(0);
+      userStepCountRef.current = 0;
       
       setCriticalNesting(0);
       setPendingInterrupt(false);

@@ -43,7 +43,7 @@ const DraggableSection: React.FC<{ item: string; children: React.ReactNode }> = 
 };
 
 const TaskDebuggerPane: React.FC<TaskDebuggerPaneProps> = ({ currentState, width }) => {
-  const [items, setItems] = useState(["anatomy", "tcb", "lists", "stats"]);
+  const [items, setItems] = useState(["tcb", "lists", "stats", "anatomy"]);
   
   // Derived state for display
   const isInReady = currentState === TaskState.READY || currentState === TaskState.RUNNING;

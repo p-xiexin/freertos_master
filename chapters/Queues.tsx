@@ -4,110 +4,171 @@ import QueueVisualizer from '../components/queues/QueueVisualizer';
 import QueueCodeView from '../components/queues/QueueCodeView';
 import QueueDebuggerPane from '../components/queues/QueueDebuggerPane';
 import DraggableHandle from '../components/DraggableHandle';
-import { QUEUE_SIZE } from '../data/queueData';
+import { QUEUE_SIZE, QueueItem } from '../data/queueData';
 
 const Queues: React.FC = () => {
-  // Queue State
-  const [queue, setQueue] = useState<(number | null)[]>(Array(QUEUE_SIZE).fill(null));
+  // Queue Internal State
+  const [queueData, setQueueData] = useState<(QueueItem | null)[]>(Array(QUEUE_SIZE).fill(null));
+  
+  // FreeRTOS Pointer Logic:
+  // pcWriteTo points to the next free slot for back-writing.
+  // u.pcReadFrom points to the LAST read slot (so next read is pcReadFrom + 1).
   const [writeIndex, setWriteIndex] = useState(0); // pcWriteTo
-  const [readIndex, setReadIndex] = useState(QUEUE_SIZE - 1); // u.pcReadFrom (starts at end in FreeRTOS init)
+  const [readIndex, setReadIndex] = useState(QUEUE_SIZE - 1); // u.pcReadFrom
   const [messagesWaiting, setMessagesWaiting] = useState(0);
   
-  // Animation State
-  const [isSending, setIsSending] = useState(false);
-  const [isReceiving, setIsReceiving] = useState(false);
+  // Animation & Operation State
+  const [operationState, setOperationState] = useState<'IDLE' | 'SEND_NORMAL' | 'SEND_URGENT' | 'RECEIVE'>('IDLE');
   const [activeLine, setActiveLine] = useState<number | null>(null);
 
-  // Task State simulation
-  const [blockedSendCount, setBlockedSendCount] = useState(0);
-  const [blockedReceiveCount, setBlockedReceiveCount] = useState(0);
+  // Task Blocking Simulation
+  // We simulate a list of tasks waiting.
+  const [blockedSenders, setBlockedSenders] = useState<string[]>([]);
+  const [blockedReceivers, setBlockedReceivers] = useState<string[]>([]);
 
   // Layout State
-  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [sidebarWidth, setSidebarWidth] = useState(300);
   const [bottomHeight, setBottomHeight] = useState(250);
 
-  const handleSend = async () => {
-    if (isSending || isReceiving) return;
-    
-    // Check Full
-    setActiveLine(7); // Check Count
-    await wait(400);
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+  // --- Logic Helpers ---
+
+  const handleSend = async (isUrgent: boolean) => {
+    if (operationState !== 'IDLE') return;
+    
+    const taskName = isUrgent ? "ISR (Urgent)" : "SensorTask";
+    
+    // 1. Check if Full
     if (messagesWaiting >= QUEUE_SIZE) {
-        setActiveLine(25); // Block Task
-        setBlockedSendCount(c => c + 1);
-        setTimeout(() => setBlockedSendCount(c => Math.max(0, c - 1)), 2000); // Simulate unblock timeout
+        // Block Logic
+        setOperationState(isUrgent ? 'SEND_URGENT' : 'SEND_NORMAL');
+        setActiveLine(6); 
+        await wait(400);
+        
+        setActiveLine(19); // Place on Event List
+        setBlockedSenders(prev => [...prev, taskName]);
+        
+        // Auto unblock simulation for demo
+        setTimeout(() => {
+             setBlockedSenders(prev => prev.filter(t => t !== taskName));
+        }, 3000);
+        
+        setOperationState('IDLE');
+        setActiveLine(null);
         return;
     }
 
-    setIsSending(true);
-    setActiveLine(10); // Copy Data
-    await wait(600);
-    
-    // Update Queue State
-    setQueue(prev => {
+    // Start Animation
+    setOperationState(isUrgent ? 'SEND_URGENT' : 'SEND_NORMAL');
+    setActiveLine(6); // Check count
+    await wait(400);
+
+    setActiveLine(9); // Copy Data
+    await wait(500);
+
+    setQueueData(prev => {
         const newQ = [...prev];
-        newQ[writeIndex] = Math.floor(Math.random() * 99) + 1;
-        return newQ;
+        const val = Math.floor(Math.random() * 99) + 1;
+        
+        if (isUrgent) {
+             // xQueueSendToFront:
+             // 1. Decrement u.pcReadFrom (wrap around)
+             // 2. Write to u.pcReadFrom
+             let newReadPtr = readIndex - 1;
+             if (newReadPtr < 0) newReadPtr = QUEUE_SIZE - 1;
+             
+             // In FreeRTOS, SendToFront writes to the NEW read ptr location
+             newQ[newReadPtr] = { value: val, type: 'URGENT' };
+             return newQ;
+        } else {
+             // xQueueSendToBack:
+             // 1. Write to pcWriteTo
+             // 2. Increment pcWriteTo
+             newQ[writeIndex] = { value: val, type: 'NORMAL' };
+             return newQ;
+        }
     });
+
+    if (isUrgent) {
+        setReadIndex(prev => {
+            let next = prev - 1;
+            return next < 0 ? QUEUE_SIZE - 1 : next;
+        });
+    } else {
+        setWriteIndex(prev => (prev + 1) % QUEUE_SIZE);
+    }
     
-    // Increment Write Index (Ring Buffer Logic)
-    setWriteIndex(prev => (prev + 1) % QUEUE_SIZE);
-    
-    await wait(300);
-    setActiveLine(13); // Increment Count
+    await wait(200);
+    setActiveLine(10); // Inc count
     setMessagesWaiting(prev => prev + 1);
 
-    // Wake blocked readers if any
-    if (blockedReceiveCount > 0) {
-        setActiveLine(16); // Remove from event list
-        setBlockedReceiveCount(c => Math.max(0, c - 1));
-        await wait(300);
-        setActiveLine(18); // Yield
+    // Wake Readers
+    if (blockedReceivers.length > 0) {
+        setActiveLine(13); // Remove from event list
+        setBlockedReceivers(prev => prev.slice(1)); // Pop one
+        await wait(200);
     }
 
-    setIsSending(false);
+    setOperationState('IDLE');
     setActiveLine(null);
   };
 
   const handleReceive = async () => {
-    if (isSending || isReceiving) return;
-    
-    // Check Empty (Not explicitly in the simplified send code, but symmetrical logic)
-    // Assume receive code logic for visualization
+    if (operationState !== 'IDLE') return;
+
+    // 1. Check Empty
     if (messagesWaiting === 0) {
-        setBlockedReceiveCount(c => c + 1);
-        setTimeout(() => setBlockedReceiveCount(c => Math.max(0, c - 1)), 2000);
+        setOperationState('RECEIVE');
+        setActiveLine(6);
+        await wait(400);
+
+        setActiveLine(20); // Place on blocked list
+        setBlockedReceivers(prev => [...prev, "ConsumerTask"]);
+        
+        setTimeout(() => {
+             setBlockedReceivers(prev => prev.filter(t => t !== "ConsumerTask"));
+        }, 3000);
+        
+        setOperationState('IDLE');
+        setActiveLine(null);
         return;
     }
 
-    setIsReceiving(true);
-    await wait(600);
-
-    // Update Read Index first (FreeRTOS increments read pointer then reads)
-    const nextReadIndex = (readIndex + 1) % QUEUE_SIZE;
-    setReadIndex(nextReadIndex);
+    setOperationState('RECEIVE');
+    setActiveLine(6); 
+    await wait(400);
     
-    // "Read" data (Visual only, we don't actually remove for demo unless we want to show empty)
-    // In FreeRTOS, data stays until overwritten, but count decreases. 
-    // For visual clarity, let's nullify it to show "consumed"
-    setQueue(prev => {
+    setActiveLine(9); // Copy from Queue
+    await wait(500);
+
+    // xQueueReceive:
+    // 1. Read from (u.pcReadFrom + 1)
+    // 2. Increment u.pcReadFrom
+    const targetIndex = (readIndex + 1) % QUEUE_SIZE;
+    
+    setQueueData(prev => {
         const newQ = [...prev];
-        newQ[nextReadIndex] = null; 
+        newQ[targetIndex] = null; // Visually consume
         return newQ;
     });
-
-    setMessagesWaiting(prev => prev - 1);
     
-    // Wake blocked senders
-    if (blockedSendCount > 0) {
-        setBlockedSendCount(c => Math.max(0, c - 1));
+    setReadIndex(targetIndex);
+
+    await wait(200);
+    setActiveLine(11); // Dec count
+    setMessagesWaiting(prev => prev - 1);
+
+    // Wake Writers
+    if (blockedSenders.length > 0) {
+        setActiveLine(14); // Remove from event list
+        setBlockedSenders(prev => prev.slice(1)); // Pop one
+        await wait(200);
     }
 
-    setIsReceiving(false);
+    setOperationState('IDLE');
+    setActiveLine(null);
   };
-
-  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   return (
     <div className="h-full w-full bg-slate-950 flex flex-col md:flex-row overflow-hidden">
@@ -115,15 +176,15 @@ const Queues: React.FC = () => {
         {/* LEFT PANE */}
         <div className="flex-1 flex flex-col min-w-0" style={{ height: '100%' }}>
             <QueueVisualizer 
-                queue={queue}
+                queue={queueData}
                 writeIndex={writeIndex}
                 readIndex={readIndex}
                 messagesWaiting={messagesWaiting}
-                isSending={isSending}
-                isReceiving={isReceiving}
-                isBlockedSend={blockedSendCount > 0}
-                isBlockedReceive={blockedReceiveCount > 0}
-                onSend={handleSend}
+                operationState={operationState}
+                blockedSenders={blockedSenders}
+                blockedReceivers={blockedReceivers}
+                onSendNormal={() => handleSend(false)}
+                onSendUrgent={() => handleSend(true)}
                 onReceive={handleReceive}
             />
 
@@ -135,6 +196,7 @@ const Queues: React.FC = () => {
             <QueueCodeView 
                 activeLine={activeLine}
                 height={bottomHeight}
+                mode={operationState === 'SEND_URGENT' ? 'FRONT' : operationState === 'RECEIVE' ? 'RECEIVE' : 'SEND'}
             />
         </div>
 
@@ -145,14 +207,14 @@ const Queues: React.FC = () => {
 
         {/* RIGHT PANE */}
         <QueueDebuggerPane 
-            queue={queue}
+            queue={queueData}
             writeIndex={writeIndex}
             readIndex={readIndex}
             messagesWaiting={messagesWaiting}
             queueSize={QUEUE_SIZE}
             width={sidebarWidth}
-            blockedSendCount={blockedSendCount}
-            blockedReceiveCount={blockedReceiveCount}
+            blockedSenders={blockedSenders}
+            blockedReceivers={blockedReceivers}
         />
         
     </div>

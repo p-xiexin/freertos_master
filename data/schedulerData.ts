@@ -34,7 +34,16 @@ export const KERNEL_TASKS_CODE = [
     { line: 32, text: "        /* Select Highest Priority Task */", type: 'comment' },
     { line: 33, text: "        taskSELECT_HIGHEST_PRIORITY_TASK();", type: 'macro' },
     { line: 34, text: "    }", type: 'plain' },
-    { line: 35, text: "}", type: 'plain' }
+    { line: 35, text: "}", type: 'plain' },
+    { line: 36, text: "", type: 'plain' },
+    { line: 37, text: "/* Idle Task - Runs when no other task is READY */", type: 'comment' },
+    { line: 38, text: "void prvIdleTask( void *pvParameters )", type: 'func' },
+    { line: 39, text: "{", type: 'plain' },
+    { line: 40, text: "    for( ;; ) {", type: 'keyword' },
+    { line: 41, text: "        /* Wait For Interrupt (Low Power) */", type: 'comment' },
+    { line: 42, text: "        prvCheckTasksWaitingTermination();", type: 'call' },
+    { line: 43, text: "    }", type: 'plain' },
+    { line: 44, text: "}", type: 'plain' }
 ];
 
 export const PORT_CODE = [
@@ -110,4 +119,5 @@ export interface SimTask {
     state: 'READY' | 'RUNNING' | 'BLOCKED';
     color: string;
     wakeTick: number; // 0 if not blocked
+    insertOrder: number; // For Queue ordering (FIFO within priority)
 }

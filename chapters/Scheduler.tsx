@@ -7,9 +7,9 @@ import DraggableHandle from '../components/DraggableHandle';
 import { SimTask } from '../data/schedulerData';
 
 const INITIAL_TASKS: SimTask[] = [
-    { id: 1, name: "LED Task", priority: 2, state: 'RUNNING', color: 'bg-rose-500', wakeTick: 0 },
-    { id: 2, name: "UART Task", priority: 1, state: 'READY', color: 'bg-indigo-500', wakeTick: 0 },
-    { id: 0, name: "Idle Task", priority: 0, state: 'READY', color: 'bg-slate-500', wakeTick: 0 },
+    { id: 1, name: "LED Task", priority: 2, state: 'READY', color: 'bg-rose-500', wakeTick: 0, insertOrder: 0 },
+    { id: 2, name: "UART Task", priority: 1, state: 'READY', color: 'bg-indigo-500', wakeTick: 0, insertOrder: 1 },
+    { id: 0, name: "Idle Task", priority: 0, state: 'READY', color: 'bg-slate-500', wakeTick: 0, insertOrder: 2 },
 ];
 
 type CodeTab = 'port' | 'kernel' | 'led' | 'uart' | 'isr';
@@ -27,6 +27,12 @@ type KernelStep = {
 };
 
 const KERNEL_SEQUENCES: Record<string, KernelStep[]> = {
+    // 0. Boot Sequence (vTaskStartScheduler)
+    BOOT_SEQ: [
+        { tab: 'kernel', line: 33, label: "Boot: Selecting Highest Priority Task...", action: 'SWITCH_CONTEXT' },
+        { tab: 'kernel', line: 35, label: "Boot: Restoring Context & Starting..." }
+    ],
+
     // 1. SysTick Handler Entry
     SYSTICK_ENTRY: [
         { tab: 'port', line: 2, label: "ISR Entry: SysTick_Handler" },
@@ -103,7 +109,8 @@ const USER_PROGRAMS: Record<number, UserStep[]> = {
         { tab: 'uart', line: 12, cycles: 1, label: (tick) => `vTaskDelay(2) @ tick ${tick}`, resetTo: 0 },
     ],
     0: [
-        { tab: 'kernel', line: null, cycles: 1, label: "Idle Task Loop" }
+        // Point to the dummy Idle task code in tasks.c
+        { tab: 'kernel', line: 42, cycles: 1, label: "Idle: Waiting for Interrupt (WFI)..." }
     ]
 };
 
@@ -111,11 +118,15 @@ const Scheduler: React.FC = () => {
   // --- State ---
   const [tickCount, setTickCount] = useState(0);
   const [tasks, setTasks] = useState<SimTask[]>(JSON.parse(JSON.stringify(INITIAL_TASKS)));
-  const [currentTaskId, setCurrentTaskId] = useState(1);
+  const [currentTaskId, setCurrentTaskId] = useState<number | null>(null);
   const [statusLog, setStatusLog] = useState("System Ready. Click Next or Play.");
   const [uartLog, setUartLog] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [isFastForwarding, setIsFastForwarding] = useState(false);
+  
+  // Configuration State
+  const [timeSliceScale, setTimeSliceScale] = useState(1); // Visual multiplier for time slice length
+  const [simulationSpeed, setSimulationSpeed] = useState(800); // ms per step
   
   // Internal OS State
   const [criticalNesting, setCriticalNesting] = useState(0);
@@ -123,18 +134,18 @@ const Scheduler: React.FC = () => {
   const [isExecutingISR, setIsExecutingISR] = useState(false);
   
   // Execution Control
-  const [mode, setMode] = useState<'USER' | 'KERNEL'>('USER');
+  const [mode, setMode] = useState<'USER' | 'KERNEL'>('KERNEL');
   const [userPointers, setUserPointers] = useState<Record<number, number>>({ 0: 0, 1: 0, 2: 0 });
   
   // Kernel Execution State
-  const [kernelSeqId, setKernelSeqId] = useState<string>('SYSTICK_ENTRY');
+  const [kernelSeqId, setKernelSeqId] = useState<string>('BOOT_SEQ');
   const [kernelPc, setKernelPc] = useState(0);
   
   // Internal Flags (Refs for logic)
   const isSwitchRequiredRef = useRef(false);
   const isPendSvPendingRef = useRef(false);
   
-  const [activeCode, setActiveCode] = useState<{ tab: CodeTab; line: number | null }>({ tab: 'led', line: 6 });
+  const [activeCode, setActiveCode] = useState<{ tab: CodeTab; line: number | null }>({ tab: 'kernel', line: 33 });
 
   // Layout
   const [sidebarWidth, setSidebarWidth] = useState(280);
@@ -146,6 +157,7 @@ const Scheduler: React.FC = () => {
   const criticalRef = useRef(criticalNesting);
   const currentTaskRef = useRef(currentTaskId);
   const userStepCountRef = useRef(0);
+  const globalOrderRef = useRef(3); // Monotonic counter for insertOrder
 
   // Sync Refs
   useEffect(() => { tickRef.current = tickCount; }, [tickCount]);
@@ -158,10 +170,42 @@ const Scheduler: React.FC = () => {
       tasksRef.current = newTasks;
   };
 
+  const getNextOrder = () => {
+      globalOrderRef.current += 1;
+      return globalOrderRef.current;
+  };
+
+  const setTaskPriority = (id: number, priority: number) => {
+      const updated = tasksRef.current.map(t => {
+          if (t.id === id) return { ...t, priority };
+          return t;
+      });
+      updateTasks(updated);
+      setStatusLog(`Config: Task ${id} Priority set to ${priority}`);
+      
+      const currentTask = tasksRef.current.find(t => t.id === currentTaskRef.current);
+      if (currentTask) {
+          const maxReadyPriority = Math.max(...updated.filter(t => t.state === 'READY').map(t => t.priority), -1);
+          if (maxReadyPriority > currentTask.priority) {
+              isSwitchRequiredRef.current = true;
+              isPendSvPendingRef.current = true; // Trigger PendSV immediately
+              setStatusLog(`Preemption: Higher Priority Task Detected!`);
+          }
+      }
+  };
+
   const blockTask = (taskId: number, delay: number) => {
       const updated = tasksRef.current.map(t => {
-          if (t.id === taskId) return { ...t, state: 'BLOCKED', wakeTick: tickRef.current + delay };
-          if (t.id !== taskId && t.state === 'RUNNING') return { ...t, state: 'READY' }; 
+          if (t.id === taskId) {
+              // Blocking: Update state and wakeTick
+              return { ...t, state: 'BLOCKED', wakeTick: tickRef.current + delay };
+          }
+          if (t.id !== taskId && t.state === 'RUNNING') {
+              // Current running task (if we called block on self) yields.
+              // Move to READY is handled by selectHighestPriority's transition
+              // But here we explicitly mark it.
+              return { ...t, state: 'READY', insertOrder: getNextOrder() }; 
+          }
           return t;
       }) as SimTask[];
       updateTasks(updated);
@@ -170,17 +214,57 @@ const Scheduler: React.FC = () => {
 
   const selectHighestPriority = () => {
       const ready = tasksRef.current.filter(t => t.state === 'READY' || t.state === 'RUNNING');
-      ready.sort((a, b) => b.priority - a.priority);
-      const next = ready.length > 0 ? ready[0] : tasksRef.current.find(t => t.id === 0)!;
       
+      const highestPrio = Math.max(...ready.map(t => t.priority));
+      const candidates = ready.filter(t => t.priority === highestPrio);
+
+      candidates.sort((a, b) => a.insertOrder - b.insertOrder);
+
+      const next = candidates.length > 0 ? candidates[0] : tasksRef.current.find(t => t.id === 0) || candidates[0];
+      
+      if (!next) return; 
+
+      const current = tasksRef.current.find(t => t.id === currentTaskRef.current);
+
       if (next.id !== currentTaskRef.current) {
-           const finalTasks = tasksRef.current.map(t => ({
-               ...t,
-               state: (t.id === next.id ? 'RUNNING' : (t.state === 'RUNNING' ? 'READY' : t.state))
-           })) as SimTask[];
-           updateTasks(finalTasks);
+           const updatedTasks = tasksRef.current.map(t => {
+               if (t.id === currentTaskRef.current) {
+                   if (t.state === 'RUNNING') {
+                       return { ...t, state: 'READY', insertOrder: getNextOrder() };
+                   }
+                   return t; 
+               }
+               if (t.id === next.id) {
+                   return { ...t, state: 'RUNNING' };
+               }
+               return t;
+           }) as SimTask[];
+
+           updateTasks(updatedTasks);
            setCurrentTaskId(next.id);
            setStatusLog(`Context Switch: ${next.name} is now RUNNING`);
+      } else {
+           if (candidates.length > 1 && isSwitchRequiredRef.current) {
+                const newOrder = getNextOrder();
+                const rotatedTasks = tasksRef.current.map(t => {
+                    if (t.id === currentTaskRef.current) return { ...t, state: 'READY', insertOrder: newOrder }; // Temporarily READY to sort
+                    return t;
+                }) as SimTask[];
+                
+                const readyRotated = rotatedTasks.filter(t => t.state === 'READY' || t.state === 'RUNNING');
+                const cRotated = readyRotated.filter(t => t.priority === highestPrio);
+                cRotated.sort((a, b) => a.insertOrder - b.insertOrder);
+                const actualNext = cRotated[0];
+
+                const finalTasks = rotatedTasks.map(t => {
+                    if (t.id === actualNext.id) return { ...t, state: 'RUNNING' };
+                    return t;
+                }) as SimTask[];
+                
+                updateTasks(finalTasks);
+                setCurrentTaskId(actualNext.id);
+                setStatusLog(`Round Robin: Switched to ${actualNext.name}`);
+           }
       }
   };
 
@@ -197,16 +281,13 @@ const Scheduler: React.FC = () => {
           return; 
       }
       
-      // 2. Handle External ISR execution (Simplified)
+      // 2. Handle External ISR execution
       if (isExecutingISR) {
           setIsExecutingISR(false);
           setActiveCode({ tab: 'isr', line: 10 });
           setStatusLog("ISR: Clearing Flag & Yielding...");
           isSwitchRequiredRef.current = true;
-          // Trigger PendSV logic if we were in kernel mode? No, simplified here.
-          // If we want to simulate switch after EXTI, we should set PendSV pending.
           isPendSvPendingRef.current = true; 
-          // Transition to Kernel to handle switch
           setMode('KERNEL');
           setKernelSeqId('PENDSV_ENTRY');
           setKernelPc(0);
@@ -216,6 +297,21 @@ const Scheduler: React.FC = () => {
       // 3. User Code Execution
       if (mode === 'USER') {
           const taskId = currentTaskRef.current;
+          
+          if (taskId === null) {
+              setMode('KERNEL');
+              setKernelSeqId('BOOT_SEQ');
+              setKernelPc(0);
+              return;
+          }
+
+          if (isPendSvPendingRef.current && criticalRef.current === 0) {
+              setMode('KERNEL');
+              setKernelSeqId('PENDSV_ENTRY');
+              setKernelPc(0);
+              return;
+          }
+
           const program = USER_PROGRAMS[taskId];
           const pc = userPointers[taskId] || 0;
           const userLine = program[pc];
@@ -232,22 +328,24 @@ const Scheduler: React.FC = () => {
           if (userLine.line === 12 && taskId !== 0) {
               const delay = taskId === 2 ? 2 : 4;
               blockTask(taskId, delay);
-              // Yield immediately -> Switch to PendSV
               setMode('KERNEL');
-              setKernelSeqId('PENDSV_ENTRY'); // Direct call to switch
+              setKernelSeqId('PENDSV_ENTRY'); 
               setKernelPc(0);
-              // Reset PC for next time
               setUserPointers(prev => ({ ...prev, [taskId]: 0 })); 
               return;
           }
 
-          // Advance User PC
           const nextPc = userLine.resetTo ?? ((pc + 1) % program.length);
           setUserPointers(prev => ({ ...prev, [taskId]: nextPc }));
 
-          // Deterministic SysTick: Every 4 user steps
+          // Deterministic SysTick
           userStepCountRef.current += 1;
-          if (criticalRef.current === 0 && userStepCountRef.current >= 4) {
+          
+          // KEY FIX: If Idle Task (0) is running, force Tick immediately (threshold = 1).
+          // Otherwise use user configured timeSliceScale.
+          const effectiveThreshold = (taskId === 0) ? 1 : (4 * timeSliceScale);
+          
+          if (criticalRef.current === 0 && userStepCountRef.current >= effectiveThreshold) {
               userStepCountRef.current = 0;
               setMode('KERNEL');
               setKernelSeqId('SYSTICK_ENTRY');
@@ -257,13 +355,12 @@ const Scheduler: React.FC = () => {
           return;
       }
 
-      // 4. Kernel/Port Execution (Instruction Stepping)
+      // 4. Kernel/Port Execution
       if (mode === 'KERNEL') {
           const sequence = KERNEL_SEQUENCES[kernelSeqId];
           const step = sequence[kernelPc];
           
           if (!step) {
-              // Safety fallback
               setMode('USER');
               return;
           }
@@ -271,19 +368,21 @@ const Scheduler: React.FC = () => {
           setActiveCode({ tab: step.tab, line: step.line });
           setStatusLog(step.label);
 
-          // Handle Action
           if (step.action === 'INC_TICK') {
               setTickCount(t => t + 1);
           }
           else if (step.action === 'UNBLOCK') {
-              // Find first blocked task that needs waking
               const taskToWake = tasksRef.current.find(t => t.state === 'BLOCKED' && t.wakeTick <= tickRef.current);
               if (taskToWake) {
                   const updated = tasksRef.current.map(t => 
-                      t.id === taskToWake.id ? { ...t, state: 'READY', wakeTick: 0 } : t
+                      t.id === taskToWake.id ? { ...t, state: 'READY', wakeTick: 0, insertOrder: getNextOrder() } : t
                   ) as SimTask[];
                   updateTasks(updated);
                   setStatusLog(`Unblocking Task: ${taskToWake.name}`);
+                  
+                  if (taskToWake.priority > (tasksRef.current.find(t => t.id === currentTaskRef.current)?.priority || -1)) {
+                      isSwitchRequiredRef.current = true;
+                  }
               }
           }
           else if (step.action === 'FLAG_SWITCH') {
@@ -298,7 +397,6 @@ const Scheduler: React.FC = () => {
               isPendSvPendingRef.current = false;
           }
 
-          // Handle Flow Control (Branch/Jump/Return/Next)
           let nextSeq = kernelSeqId;
           let nextPc = kernelPc + 1;
 
@@ -307,27 +405,23 @@ const Scheduler: React.FC = () => {
               nextPc = 0;
           } 
           else if (step.return) {
-              // Return from "function calls"
               if (kernelSeqId.startsWith('INC_TICK')) {
                   nextSeq = 'SYSTICK_RESUME';
                   nextPc = 0;
               }
           }
           else if (step.branch === 'CHECK_UNBLOCK') {
-              // Check if we need to look at list
               const hasBlocked = tasksRef.current.some(t => t.state === 'BLOCKED');
               const timeReached = tasksRef.current.some(t => t.state === 'BLOCKED' && t.wakeTick <= tickRef.current);
               if (hasBlocked && timeReached) {
                   nextSeq = 'INC_TICK_LOOP_CHECK';
                   nextPc = 0;
               } else {
-                  nextSeq = 'INC_TICK_SKIP'; // Skip loop
+                  nextSeq = 'INC_TICK_SKIP';
                   nextPc = 0;
               }
           }
           else if (step.branch === 'CHECK_EMPTY') {
-               const tasksToWake = tasksRef.current.filter(t => t.state === 'BLOCKED' && t.wakeTick <= tickRef.current);
-               // Since we unblock one at a time in 'UNBLOCK' action, check if any left
                const stillHas = tasksRef.current.some(t => t.state === 'BLOCKED' && t.wakeTick <= tickRef.current);
                if (stillHas) {
                    nextSeq = 'INC_TICK_UNBLOCK';
@@ -347,16 +441,17 @@ const Scheduler: React.FC = () => {
               }
           }
 
-          // Check for sequence end without jump/return
           if (nextSeq === kernelSeqId && nextPc >= sequence.length) {
-              // End of a linear sequence
-              if (kernelSeqId === 'SYSTICK_EXIT') {
-                  // Exit ISR
+              if (kernelSeqId === 'BOOT_SEQ') {
+                  setMode('USER');
+                  return;
+              }
+              else if (kernelSeqId === 'SYSTICK_EXIT') {
                   if (isPendSvPendingRef.current) {
-                      nextSeq = 'PENDSV_ENTRY'; // Tail chain
+                      nextSeq = 'PENDSV_ENTRY'; 
                       nextPc = 0;
                   } else {
-                      setMode('USER'); // Return to user
+                      setMode('USER');
                       return;
                   }
               }
@@ -365,7 +460,7 @@ const Scheduler: React.FC = () => {
                   return;
               }
               else if (kernelSeqId === 'SYSTICK_SWITCH') {
-                  nextSeq = 'SYSTICK_EXIT'; // Continue
+                  nextSeq = 'SYSTICK_EXIT'; 
                   nextPc = 0;
               }
           }
@@ -374,34 +469,38 @@ const Scheduler: React.FC = () => {
           setKernelPc(nextPc);
       }
 
-  }, [pendingInterrupt, isExecutingISR, mode, userPointers, kernelSeqId, kernelPc]);
+  }, [pendingInterrupt, isExecutingISR, mode, userPointers, kernelSeqId, kernelPc, timeSliceScale]);
 
   // --- Auto Run Loop ---
   useEffect(() => {
     let timer: any;
     if (isRunning) {
-        timer = setTimeout(() => executeStep(false), isFastForwarding ? 100 : 800);
+        // Use user-configured simulation speed, or very fast if "Fast Forwarding" (optional feature)
+        const speed = isFastForwarding ? 100 : simulationSpeed;
+        timer = setTimeout(() => executeStep(false), speed);
     }
     return () => clearTimeout(timer);
-  }, [isRunning, executeStep, isFastForwarding]);
+  }, [isRunning, executeStep, isFastForwarding, simulationSpeed]);
 
   const handleReset = () => {
       setIsRunning(false);
       setTickCount(0);
       setTasks(JSON.parse(JSON.stringify(INITIAL_TASKS)));
-      setCurrentTaskId(1);
+      setCurrentTaskId(null); 
       
-      setMode('USER');
-      setUserPointers({ 0: 0, 1: 0, 2: 0 });
-      setKernelSeqId('SYSTICK_ENTRY');
+      setMode('KERNEL');
+      setKernelSeqId('BOOT_SEQ');
       setKernelPc(0);
+
+      setUserPointers({ 0: 0, 1: 0, 2: 0 });
       userStepCountRef.current = 0;
+      globalOrderRef.current = 3;
       
       setCriticalNesting(0);
       setPendingInterrupt(false);
       setUartLog("");
       setStatusLog("System Reset.");
-      setActiveCode({ tab: 'led', line: 6 });
+      setActiveCode({ tab: 'kernel', line: 33 });
       isSwitchRequiredRef.current = false;
       isPendSvPendingRef.current = false;
   };
@@ -454,12 +553,17 @@ const Scheduler: React.FC = () => {
         {/* RIGHT PANE */}
         <SchedulerDebuggerPane 
             tickCount={tickCount}
-            currentTaskId={currentTaskId}
+            currentTaskId={currentTaskId ?? -1} 
             tasks={tasks}
             width={sidebarWidth}
             criticalNesting={criticalNesting}
             pendingInterrupt={pendingInterrupt}
             isExecutingISR={isExecutingISR}
+            onPriorityChange={setTaskPriority}
+            timeSliceScale={timeSliceScale}
+            onTimeSliceChange={setTimeSliceScale}
+            simulationSpeed={simulationSpeed}
+            onSpeedChange={setSimulationSpeed}
         />
         
     </div>

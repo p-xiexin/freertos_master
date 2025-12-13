@@ -10,7 +10,9 @@ interface SchedulerCodeViewProps {
   uartLog?: string;
 }
 
-const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ activeTabOverride, activeLine, height, uartLog }) => {
+const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ 
+    activeTabOverride, activeLine, height, uartLog 
+}) => {
   const [activeTab, setActiveTab] = useState<'port' | 'kernel' | 'led' | 'uart' | 'isr' | 'log'>('port');
   const scrollRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -117,9 +119,14 @@ const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ activeTabOverride
                 <div className="p-2">
                     {getCode().map((line, idx) => {
                         const isActive = activeLine === line.line;
+                        
                         return (
-                            <div key={idx} id={`sch-line-${line.line}`} className={`flex ${isActive ? 'bg-sky-900/20 -mx-2 px-2' : ''}`}>
-                                <div className={`w-8 text-right pr-3 select-none shrink-0 text-[10px] ${isActive ? 'text-sky-500 font-bold' : 'text-slate-600'}`}>{line.line}</div>
+                            <div key={idx} id={`sch-line-${line.line}`} className={`flex group ${isActive ? 'bg-sky-900/20 -mx-2 px-2' : ''}`}>
+                                {/* Gutter */}
+                                <div className="w-8 text-right pr-3 select-none shrink-0 text-[10px] flex items-center justify-end">
+                                    <span className={`${isActive ? 'text-sky-500 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>{line.line}</span>
+                                </div>
+                                
                                 <div className="flex-1 whitespace-pre truncate text-xs leading-5">
                                     {line.type === 'comment' ? <span className="text-emerald-600 italic">{line.text}</span> :
                                         line.type === 'keyword' ? <span className="text-purple-400">{line.text}</span> :

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Bug, GripVertical, Layers, Zap, ShieldAlert } from 'lucide-react';
+import { Bug, GripVertical, Layers, Zap, ShieldAlert, Sliders, Gauge } from 'lucide-react';
 import { Reorder, useDragControls } from 'framer-motion';
 import CollapsibleSection from '../CollapsibleSection';
 import { SimTask } from '../../data/schedulerData';
@@ -13,6 +13,11 @@ interface SchedulerDebuggerPaneProps {
   criticalNesting: number;
   pendingInterrupt: boolean;
   isExecutingISR: boolean;
+  onPriorityChange: (id: number, priority: number) => void;
+  timeSliceScale: number;
+  onTimeSliceChange: (scale: number) => void;
+  simulationSpeed?: number;
+  onSpeedChange?: (speed: number) => void;
 }
 
 const DebugRow = ({ label, value, color = "text-slate-400", animate = false }: { label: string, value: string | number, color?: string, animate?: boolean }) => (
@@ -34,8 +39,9 @@ const DraggableSection: React.FC<{ item: string; children: React.ReactNode }> = 
             <CollapsibleSection 
                 title={
                     item === 'stats' ? "System Status" : 
-                    item === 'lists' ? "Ready Lists Inspection" : 
-                    "Scheduling Principles"
+                    item === 'config' ? "Configuration" :
+                    item === 'principles' ? "Scheduling Principles" :
+                    "Ready Lists Inspection"
                 }
                 prefix={<div onPointerDown={(e) => controls.start(e)}><GripVertical size={14} /></div>}
             >
@@ -46,9 +52,10 @@ const DraggableSection: React.FC<{ item: string; children: React.ReactNode }> = 
 };
 
 const SchedulerDebuggerPane: React.FC<SchedulerDebuggerPaneProps> = ({ 
-    tickCount, currentTaskId, tasks, width, criticalNesting, pendingInterrupt, isExecutingISR
+    tickCount, currentTaskId, tasks, width, criticalNesting, pendingInterrupt, isExecutingISR,
+    onPriorityChange, timeSliceScale, onTimeSliceChange, simulationSpeed = 800, onSpeedChange
 }) => {
-  const [items, setItems] = useState(["stats", "lists", "principles"]);
+  const [items, setItems] = useState(["config", "stats", "lists", "principles"]);
   
   const currentTaskName = isExecutingISR ? "ISR (Hardware)" : (tasks.find(t => t.id === currentTaskId)?.name || "Switching...");
   const readyCounts = [0, 1, 2, 3, 4].map(p => tasks.filter(t => t.priority === p && t.state === 'READY').length);
@@ -67,6 +74,65 @@ const SchedulerDebuggerPane: React.FC<SchedulerDebuggerPaneProps> = ({
          <Reorder.Group axis="y" values={items} onReorder={setItems} className="space-y-2">
              
              {items.map(item => {
+                 if (item === 'config') return (
+                    <DraggableSection key={item} item={item}>
+                        <div className="px-1 py-1 space-y-4">
+                            {/* Priority Sliders */}
+                            {tasks.filter(t => t.id !== 0).map(task => (
+                                <div key={task.id} className="space-y-1">
+                                    <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500">
+                                        <span>{task.name} Priority</span>
+                                        <span className="text-sky-400">{task.priority}</span>
+                                    </div>
+                                    <input 
+                                        type="range" 
+                                        min="0" max="4" 
+                                        value={task.priority}
+                                        onChange={(e) => onPriorityChange(task.id, parseInt(e.target.value))}
+                                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500 hover:accent-sky-400"
+                                    />
+                                </div>
+                            ))}
+                            
+                            <div className="border-t border-slate-800/50 my-2"></div>
+
+                            {/* Simulation Speed Slider */}
+                            {onSpeedChange && (
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500">
+                                        <span className="flex items-center gap-1"><Gauge size={12}/> Animation Speed</span>
+                                        <span className="text-emerald-400">{simulationSpeed}ms</span>
+                                    </div>
+                                    <input 
+                                        type="range" 
+                                        min="50" max="2000" step="50"
+                                        value={simulationSpeed}
+                                        onChange={(e) => onSpeedChange(parseInt(e.target.value))}
+                                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400"
+                                        style={{ direction: 'rtl' }} // Invert so left is fast, right is slow? No, usually right is fast? Actually "Delay" means right is slow. Let's keep normal: left=50ms (fast), right=2000ms (slow)
+                                    />
+                                    <p className="text-[9px] text-slate-600 italic">Adjust playback step delay.</p>
+                                </div>
+                            )}
+
+                            {/* Time Slice Slider */}
+                            <div className="space-y-1">
+                                <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500">
+                                    <span className="flex items-center gap-1"><Layers size={12}/> Ticks per Slice</span>
+                                    <span className="text-amber-400">{timeSliceScale}x</span>
+                                </div>
+                                <input 
+                                    type="range" 
+                                    min="1" max="10" 
+                                    value={timeSliceScale}
+                                    onChange={(e) => onTimeSliceChange(parseInt(e.target.value))}
+                                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500 hover:accent-amber-400"
+                                />
+                                <p className="text-[9px] text-slate-600 italic">Logical CPU cycles before SysTick.</p>
+                            </div>
+                        </div>
+                    </DraggableSection>
+                 );
                  if (item === 'stats') return (
                      <DraggableSection key={item} item={item}>
                         <div className="px-1">
@@ -96,8 +162,8 @@ const SchedulerDebuggerPane: React.FC<SchedulerDebuggerPaneProps> = ({
                             <div className="flex items-start gap-2">
                                 <Layers size={14} className="text-sky-500 mt-0.5 shrink-0"/>
                                 <div>
-                                    <strong className="text-sky-400 block mb-1">Time Slicing</strong>
-                                    <p>调度器以 Tick 为单位分配时间片。空闲任务或其他任务在 Tick 中断中被唤醒并重新评估优先级。</p>
+                                    <strong className="text-sky-400 block mb-1">Time Slicing (Round Robin)</strong>
+                                    <p>当多个同优先级任务处于 Ready 状态时，调度器会在 Tick 中断中轮流执行它们（队头移至队尾）。</p>
                                 </div>
                             </div>
                         </div>
@@ -107,7 +173,7 @@ const SchedulerDebuggerPane: React.FC<SchedulerDebuggerPaneProps> = ({
                     <DraggableSection key={item} item={item}>
                         {/* Simplified List View */}
                         <div className="space-y-1 pt-1">
-                             <div className="text-[10px] uppercase font-bold text-slate-500">Ready Lists</div>
+                             <div className="text-[10px] uppercase font-bold text-slate-500">Ready Lists Count</div>
                              {readyCounts.map((c, i) => (
                                  <div key={i} className={`flex justify-between text-[10px] pl-2 ${c>0 ? 'text-sky-300 font-bold' : 'text-slate-600'}`}>
                                      <span>Priority {i}</span>

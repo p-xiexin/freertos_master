@@ -81,7 +81,7 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
 
             // Start from the RIGHT side of the button
             const startX = btnCenterX + btnRadius - cont.left;
-            const startY = btnCenterY - cont.top;
+            const startY = btnCenterY - cont.top; 
             
             // Target the bottom-center of the CPU
             const endX = (cpu.left + cpu.width / 2) - cont.left; 
@@ -164,8 +164,8 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
          canFinish={false}
        />
 
-       {/* Floating Tick Counter (Top Right) */}
-       <div className="absolute top-6 right-6 z-40 flex flex-col gap-2">
+       {/* Floating Tick Counter (Moved to Top Left) */}
+       <div className="absolute top-6 left-6 z-40 flex flex-col gap-2">
            
            {/* Primary: RTOS Tick */}
            <motion.div 
@@ -201,7 +201,7 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
            </motion.div>
 
            {/* Secondary: CPU Cycles (Simulated High Res) */}
-           <div className="bg-slate-950/80 backdrop-blur border border-slate-800 rounded-lg px-4 py-2 flex items-center gap-3 opacity-80 hover:opacity-100 transition-opacity">
+           <div className="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-lg px-4 py-2 flex items-center gap-3 opacity-80 hover:opacity-100 transition-opacity">
                 <div className="bg-slate-900 p-1.5 rounded border border-slate-800">
                     <Hash size={14} className="text-slate-500"/>
                 </div>

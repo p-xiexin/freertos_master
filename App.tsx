@@ -1,11 +1,10 @@
 
 import React, { useState } from 'react';
-import { BookOpen, Cpu, Layers, GitMerge, Menu, ArrowRightLeft, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { BookOpen, Cpu, Layers, GitMerge, Menu, ExternalLink } from 'lucide-react';
 import Intro from './chapters/Intro';
 import TaskLifecycle from './chapters/TaskLifecycle';
 import Queues from './chapters/Queues';
 import Scheduler from './chapters/Scheduler';
-import ContextSwitching from './chapters/ContextSwitching';
 import AIChat from './components/AIChat';
 import { ChapterId } from './types';
 
@@ -17,7 +16,6 @@ function App() {
   const chapters = [
     { id: ChapterId.INTRO, title: '课程简介', icon: BookOpen, component: Intro },
     { id: ChapterId.TASKS, title: '任务管理', icon: Cpu, component: TaskLifecycle },
-    { id: ChapterId.CONTEXT, title: '上下文切换 (PendSV)', icon: ArrowRightLeft, component: ContextSwitching },
     { id: ChapterId.SCHEDULER, title: '任务调度器', icon: Layers, component: Scheduler },
     { id: ChapterId.QUEUES, title: '队列与通信', icon: GitMerge, component: Queues },
   ];
@@ -28,7 +26,6 @@ function App() {
   // These chapters use the new 3-pane dashboard layout and need full screen space
   const isFullPage = [
     ChapterId.TASKS, 
-    ChapterId.CONTEXT, 
     ChapterId.QUEUES, 
     ChapterId.SCHEDULER
   ].includes(activeChapter);
@@ -54,27 +51,21 @@ function App() {
         w-72
       `}>
         {/* Sidebar Header */}
-        <div className={`h-16 flex items-center border-b border-slate-800 shrink-0 ${isDesktopCollapsed ? 'justify-center' : 'justify-between px-6'}`}>
-          {!isDesktopCollapsed && (
+        <div 
+          onClick={() => setDesktopCollapsed(!isDesktopCollapsed)}
+          className={`h-16 flex items-center border-b border-slate-800 shrink-0 cursor-pointer hover:bg-slate-800/80 transition-colors ${isDesktopCollapsed ? 'justify-center' : 'px-6'}`}
+          title={isDesktopCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {!isDesktopCollapsed ? (
             <div className="overflow-hidden">
               <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-sky-400 to-indigo-500 whitespace-nowrap">
                 FreeRTOS
               </h1>
               <p className="text-[10px] text-slate-500 truncate">Interactive Masterclass</p>
             </div>
-          )}
-          {isDesktopCollapsed && (
+          ) : (
              <span className="font-bold text-sky-400 text-xl">OS</span>
           )}
-
-          {/* Collapse Button (Desktop Only) */}
-          <button 
-            onClick={() => setDesktopCollapsed(!isDesktopCollapsed)}
-            className="hidden md:flex p-1 rounded-md text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
-            title={isDesktopCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            {isDesktopCollapsed ? <ChevronRight size={18}/> : <ChevronLeft size={18}/>}
-          </button>
         </div>
         
         {/* Navigation Items */}

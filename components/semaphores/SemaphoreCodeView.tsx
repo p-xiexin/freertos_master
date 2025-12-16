@@ -1,24 +1,21 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Code2 } from 'lucide-react';
-import { QUEUE_CODE_SEND, QUEUE_CODE_FRONT, QUEUE_CODE_RECEIVE } from '../../data/queueData';
+import { SEM_TAKE_CODE, SEM_GIVE_CODE } from '../../data/semaphoreData';
 
-interface QueueCodeViewProps {
+interface SemaphoreCodeViewProps {
   activeLine: number | null;
   height: number;
-  mode: 'SEND' | 'FRONT' | 'RECEIVE';
+  mode: 'TAKE' | 'GIVE';
 }
 
-const QueueCodeView: React.FC<QueueCodeViewProps> = ({ activeLine, height, mode }) => {
+const SemaphoreCodeView: React.FC<SemaphoreCodeViewProps> = ({ activeLine, height, mode }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const codeData = mode === 'FRONT' ? QUEUE_CODE_FRONT : 
-                   mode === 'RECEIVE' ? QUEUE_CODE_RECEIVE : 
-                   QUEUE_CODE_SEND;
+  const codeData = mode === 'TAKE' ? SEM_TAKE_CODE : SEM_GIVE_CODE;
 
   useEffect(() => {
     if (activeLine !== null && scrollRef.current) {
-        const lineEl = document.getElementById(`q-line-${activeLine}`);
+        const lineEl = document.getElementById(`sem-line-${activeLine}`);
         if (lineEl) {
             lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
@@ -31,8 +28,8 @@ const QueueCodeView: React.FC<QueueCodeViewProps> = ({ activeLine, height, mode 
             <Code2 size={14} className="text-sky-500"/> 
             <span className="font-bold text-xs text-sky-400">queue.c</span>
             <span className="text-[10px] text-slate-500 mx-2">|</span>
-            <span className={`text-[10px] font-bold ${mode === 'FRONT' ? 'text-rose-400' : mode === 'RECEIVE' ? 'text-emerald-400' : 'text-indigo-400'}`}>
-                {mode === 'FRONT' ? 'xQueueSendToFront (Urgent)' : mode === 'RECEIVE' ? 'xQueueReceive' : 'xQueueSendToBack (Standard)'}
+            <span className={`text-[10px] font-bold ${mode === 'TAKE' ? 'text-rose-400' : 'text-emerald-400'}`}>
+                {mode === 'TAKE' ? 'xQueueSemaphoreTake (Consume)' : 'xQueueGenericSend (Give/Produce)'}
             </span>
        </div>
 
@@ -40,7 +37,7 @@ const QueueCodeView: React.FC<QueueCodeViewProps> = ({ activeLine, height, mode 
             {codeData.map((line, idx) => {
                 const isActive = activeLine === line.line;
                 return (
-                    <div key={idx} id={`q-line-${line.line}`} className={`flex ${isActive ? 'bg-sky-900/20 -mx-2 px-2' : ''}`}>
+                    <div key={idx} id={`sem-line-${line.line}`} className={`flex ${isActive ? 'bg-sky-900/20 -mx-2 px-2' : ''}`}>
                         <div className={`w-8 text-right pr-3 select-none shrink-0 text-[10px] ${isActive ? 'text-sky-500 font-bold' : 'text-slate-600'}`}>{line.line}</div>
                         <div className="flex-1 whitespace-pre truncate text-xs leading-5">
                             {line.type === 'comment' ? <span className="text-emerald-600 italic">{line.text}</span> :
@@ -59,4 +56,4 @@ const QueueCodeView: React.FC<QueueCodeViewProps> = ({ activeLine, height, mode 
   );
 };
 
-export default QueueCodeView;
+export default SemaphoreCodeView;

@@ -1,17 +1,18 @@
 
 import React from 'react';
-import { Bug, Database } from 'lucide-react';
+import { Bug, RotateCw, Copy, Lock, Zap } from 'lucide-react';
 import CollapsibleSection from '../CollapsibleSection';
+import { QueueItem } from '../../data/queueData';
 
 interface QueueDebuggerPaneProps {
-  queue: (number | null)[];
+  queue: (QueueItem | null)[];
   writeIndex: number;
   readIndex: number;
   messagesWaiting: number;
   queueSize: number;
   width: number;
-  blockedSendCount: number;
-  blockedReceiveCount: number;
+  blockedSenders: string[];
+  blockedReceivers: string[];
 }
 
 const DebugRow = ({ label, value, color = "text-slate-400" }: { label: string, value: string | number, color?: string }) => (
@@ -22,7 +23,7 @@ const DebugRow = ({ label, value, color = "text-slate-400" }: { label: string, v
 );
 
 const QueueDebuggerPane: React.FC<QueueDebuggerPaneProps> = ({ 
-    queue, writeIndex, readIndex, messagesWaiting, queueSize, width, blockedSendCount, blockedReceiveCount 
+    queue, writeIndex, readIndex, messagesWaiting, queueSize, width, blockedSenders, blockedReceivers 
 }) => {
   
   return (
@@ -56,22 +57,37 @@ const QueueDebuggerPane: React.FC<QueueDebuggerPaneProps> = ({
              <CollapsibleSection title="Event Lists (Blocking)">
                  <div className="px-1">
                     <div className="mb-2">
-                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">xTasksWaitingToSend</div>
-                        {blockedSendCount > 0 ? (
-                            <div className="text-xs text-rose-400 bg-rose-900/20 border border-rose-500/30 p-1.5 rounded flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"/>
-                                {blockedSendCount} Task(s) Blocked
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 flex justify-between">
+                            <span>xTasksWaitingToSend</span>
+                            <span className="text-slate-600">{blockedSenders.length}</span>
+                        </div>
+                        {blockedSenders.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                                {blockedSenders.map((task, i) => (
+                                    <div key={i} className="text-xs text-rose-300 bg-rose-900/10 border border-rose-500/20 p-1 rounded flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500"/> {task}
+                                    </div>
+                                ))}
                             </div>
                         ) : (
                             <div className="text-[10px] text-slate-600 italic pl-2">List Empty</div>
                         )}
                     </div>
+                    
+                    <div className="border-t border-slate-800/50 my-2"></div>
+
                     <div>
-                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">xTasksWaitingToReceive</div>
-                        {blockedReceiveCount > 0 ? (
-                            <div className="text-xs text-amber-400 bg-amber-900/20 border border-amber-500/30 p-1.5 rounded flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"/>
-                                {blockedReceiveCount} Task(s) Blocked
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 flex justify-between">
+                            <span>xTasksWaitingToReceive</span>
+                            <span className="text-slate-600">{blockedReceivers.length}</span>
+                        </div>
+                        {blockedReceivers.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                                {blockedReceivers.map((task, i) => (
+                                    <div key={i} className="text-xs text-amber-300 bg-amber-900/10 border border-amber-500/20 p-1 rounded flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"/> {task}
+                                    </div>
+                                ))}
                             </div>
                         ) : (
                             <div className="text-[10px] text-slate-600 italic pl-2">List Empty</div>
@@ -82,18 +98,63 @@ const QueueDebuggerPane: React.FC<QueueDebuggerPaneProps> = ({
          </div>
 
          {/* Memory View */}
-         <div className="bg-slate-950/50 rounded-lg border border-slate-800/50 overflow-hidden">
+         <div className="bg-slate-900/50 rounded-lg border border-slate-800/50 overflow-hidden">
             <CollapsibleSection title="Buffer Storage Area">
                 <div className="grid grid-cols-5 gap-1 p-1">
-                    {queue.map((val, i) => (
+                    {queue.map((item, i) => (
                         <div key={i} className={`
                             h-8 rounded flex items-center justify-center text-[10px] font-mono border
-                            ${val !== null ? 'bg-sky-900/30 border-sky-500/50 text-sky-300' : 'bg-slate-900 border-slate-800 text-slate-600'}
+                            ${item !== null 
+                                ? (item.type === 'URGENT' ? 'bg-rose-900/30 border-rose-500/50 text-rose-300' : 'bg-indigo-900/30 border-indigo-500/50 text-indigo-300')
+                                : 'bg-slate-900 border-slate-800 text-slate-600'}
                         `}>
-                            {val !== null ? val : "0x00"}
+                            {item !== null ? item.value : "00"}
                         </div>
                     ))}
                 </div>
+            </CollapsibleSection>
+         </div>
+
+         {/* Core Principles */}
+         <div className="bg-slate-900/50 rounded-lg border border-slate-800/50 overflow-hidden mt-2">
+            <CollapsibleSection title="Core Principles (核心原理)">
+               <div className="p-2 space-y-3 text-xs text-slate-400 leading-relaxed">
+                   {/* 1. Ring Buffer */}
+                   <div className="flex gap-2 items-start">
+                       <RotateCw size={14} className="text-sky-500 shrink-0 mt-0.5"/>
+                       <div>
+                           <strong className="text-sky-400 block mb-0.5">Ring Buffer (环形缓冲)</strong>
+                           <p>使用固定内存空间。指针移动到末尾后会自动回绕到 0。这避免了数据移动（memmove）的开销，保证了 O(1) 的存取效率。</p>
+                       </div>
+                   </div>
+
+                   {/* 2. Copy by Value */}
+                   <div className="flex gap-2 items-start">
+                       <Copy size={14} className="text-indigo-500 shrink-0 mt-0.5"/>
+                       <div>
+                           <strong className="text-indigo-400 block mb-0.5">Copy by Value (值拷贝)</strong>
+                           <p>FreeRTOS 将数据<b>完整复制</b>到队列中，而不是存储引用。这确保了即便发送源变量销毁，接收方仍能收到正确数据。</p>
+                       </div>
+                   </div>
+
+                   {/* 3. Blocking */}
+                   <div className="flex gap-2 items-start">
+                       <Lock size={14} className="text-amber-500 shrink-0 mt-0.5"/>
+                       <div>
+                           <strong className="text-amber-400 block mb-0.5">Blocking (阻塞机制)</strong>
+                           <p>当队列满（发送）或空（接收）时，任务会被放入 <code>xTasksWaiting...</code> 链表并挂起，不消耗 CPU 资源，直到超时或条件满足。</p>
+                       </div>
+                   </div>
+
+                   {/* 4. SendToFront */}
+                   <div className="flex gap-2 items-start">
+                       <Zap size={14} className="text-rose-500 shrink-0 mt-0.5"/>
+                       <div>
+                           <strong className="text-rose-400 block mb-0.5">Urgent Data (紧急插队)</strong>
+                           <p><code>SendToFront</code> 是 LIFO（后进先出）操作。它将数据写入 <code>pcReadFrom</code> 当前指向的位置，确保下次 <code>Receive</code> 立即读到它。</p>
+                       </div>
+                   </div>
+               </div>
             </CollapsibleSection>
          </div>
 

@@ -1,24 +1,29 @@
 
 import React, { useState } from 'react';
-import { BookOpen, Cpu, Layers, GitMerge, Menu, ArrowRightLeft } from 'lucide-react';
+import { BookOpen, Cpu, Layers, GitMerge, Menu, ArrowRightLeft, ExternalLink, Key, ShieldAlert } from 'lucide-react';
 import Intro from './chapters/Intro';
 import TaskLifecycle from './chapters/TaskLifecycle';
 import Queues from './chapters/Queues';
 import Scheduler from './chapters/Scheduler';
 import ContextSwitching from './chapters/ContextSwitching';
+import Semaphores from './chapters/Semaphores';
+import PriorityInversion from './chapters/PriorityInversion';
 import AIChat from './components/AIChat';
 import { ChapterId } from './types';
 
 function App() {
   const [activeChapter, setActiveChapter] = useState<ChapterId>(ChapterId.INTRO);
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isDesktopCollapsed, setDesktopCollapsed] = useState(false);
 
   const chapters = [
     { id: ChapterId.INTRO, title: '课程简介', icon: BookOpen, component: Intro },
     { id: ChapterId.TASKS, title: '任务管理', icon: Cpu, component: TaskLifecycle },
-    { id: ChapterId.CONTEXT, title: '上下文切换 (PendSV)', icon: ArrowRightLeft, component: ContextSwitching },
+    { id: ChapterId.CONTEXT, title: '上下文切换', icon: ArrowRightLeft, component: ContextSwitching },
     { id: ChapterId.SCHEDULER, title: '任务调度器', icon: Layers, component: Scheduler },
     { id: ChapterId.QUEUES, title: '队列与通信', icon: GitMerge, component: Queues },
+    { id: ChapterId.SEMAPHORES, title: '信号量与同步', icon: Key, component: Semaphores },
+    { id: ChapterId.INVERSION, title: '优先级反转', icon: ShieldAlert, component: PriorityInversion },
   ];
 
   const ActiveComponent = chapters.find(c => c.id === activeChapter)?.component || Intro;
@@ -29,7 +34,9 @@ function App() {
     ChapterId.TASKS, 
     ChapterId.CONTEXT, 
     ChapterId.QUEUES, 
-    ChapterId.SCHEDULER
+    ChapterId.SCHEDULER,
+    ChapterId.SEMAPHORES,
+    ChapterId.INVERSION
   ].includes(activeChapter);
 
   return (
@@ -40,52 +47,91 @@ function App() {
         <span className="font-bold text-sky-400 flex items-center gap-2">
           <Cpu size={20} /> FreeRTOS.master
         </span>
-        <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="text-white">
+        <button onClick={() => setMobileMenuOpen(!isMobileMenuOpen)} className="text-white">
           <Menu />
         </button>
       </div>
 
       {/* Sidebar Navigation */}
       <aside className={`
-        fixed md:relative inset-y-0 left-0 w-72 bg-slate-900 border-r border-slate-800 transform transition-transform duration-300 z-40
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        fixed md:relative inset-y-0 left-0 bg-slate-900 border-r border-slate-800 transform transition-all duration-300 z-40 flex flex-col
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        ${isDesktopCollapsed ? 'md:w-20' : 'md:w-72'}
+        w-72
       `}>
-        <div className="p-6 border-b border-slate-800 hidden md:block">
-          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-sky-400 to-indigo-500">
-            FreeRTOS.master
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">交互式学习平台</p>
+        {/* Sidebar Header */}
+        <div 
+          onClick={() => setDesktopCollapsed(!isDesktopCollapsed)}
+          className={`h-16 flex items-center border-b border-slate-800 shrink-0 cursor-pointer hover:bg-slate-800/50 transition-colors ${isDesktopCollapsed ? 'justify-center' : 'px-6'}`}
+          title={isDesktopCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {!isDesktopCollapsed ? (
+            <div className="overflow-hidden">
+              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-sky-400 to-indigo-500 whitespace-nowrap">
+                FreeRTOS
+              </h1>
+              <p className="text-[10px] text-slate-500 truncate">Interactive Masterclass</p>
+            </div>
+          ) : (
+             <span className="font-bold text-sky-400 text-xl">OS</span>
+          )}
         </div>
         
-        <nav className="p-4 space-y-2">
+        {/* Navigation Items */}
+        <nav className="p-3 space-y-2 mt-2 flex-1 overflow-y-auto custom-scrollbar">
           {chapters.map((chapter) => (
             <button
               key={chapter.id}
               onClick={() => {
                 setActiveChapter(chapter.id);
-                setSidebarOpen(false);
+                setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200
+              title={isDesktopCollapsed ? chapter.title : ''}
+              className={`w-full flex items-center ${isDesktopCollapsed ? 'justify-center px-0' : 'px-4'} py-3 rounded-lg text-sm font-medium transition-all duration-200 group
                 ${activeChapter === chapter.id 
                   ? 'bg-sky-600/10 text-sky-400 border border-sky-600/20 shadow-[0_0_15px_rgba(56,189,248,0.1)]' 
                   : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
                 }`}
             >
-              <chapter.icon size={18} />
-              {chapter.title}
+              <chapter.icon size={20} className="shrink-0" />
+              {!isDesktopCollapsed && <span className="ml-3 truncate">{chapter.title}</span>}
+              
+              {/* Tooltip for collapsed mode */}
+              {isDesktopCollapsed && (
+                <div className="absolute left-16 bg-slate-800 text-slate-200 text-xs px-2 py-1 rounded border border-slate-700 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 whitespace-nowrap">
+                  {chapter.title}
+                </div>
+              )}
             </button>
           ))}
         </nav>
 
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-800 bg-slate-900">
-           <div className="text-xs text-slate-500 text-center">
-             基于 v10.5.1 版本
-           </div>
+        {/* Sidebar Footer */}
+        <div className="shrink-0 p-4 border-t border-slate-800 bg-slate-900">
+           <a 
+             href="https://www.freertos.org/" 
+             target="_blank" 
+             rel="noopener noreferrer"
+             className={`flex items-center ${isDesktopCollapsed ? 'justify-center' : 'justify-center gap-2'} text-xs text-slate-500 hover:text-sky-400 transition-colors group`}
+             title="Visit FreeRTOS.org"
+           >
+             {!isDesktopCollapsed && <span>基于 v10.5.1 版本</span>}
+             <ExternalLink size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+           </a>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className={`flex-1 ${isFullPage ? 'overflow-hidden' : 'overflow-y-auto'} h-[calc(100vh-65px)] md:h-screen bg-slate-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950`}>
+      <main className={`flex-1 ${isFullPage ? 'overflow-hidden' : 'overflow-y-auto'} h-[calc(100vh-65px)] md:h-screen bg-slate-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950 relative`}>
+        
+        {/* Overlay for mobile when menu is open */}
+        {isMobileMenuOpen && (
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm z-30 md:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
+
         <div className={isFullPage ? "w-full h-full" : "max-w-6xl mx-auto p-6 md:p-12 pb-32"}>
           <ActiveComponent />
         </div>

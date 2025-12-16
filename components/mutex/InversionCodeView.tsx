@@ -1,38 +1,38 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Code2 } from 'lucide-react';
-import { QUEUE_CODE_SEND, QUEUE_CODE_FRONT, QUEUE_CODE_RECEIVE } from '../../data/queueData';
+import { MUTEX_TAKE_CODE, INHERIT_LOGIC_CODE, DISINHERIT_LOGIC_CODE } from '../../data/inversionData';
 
-interface QueueCodeViewProps {
+interface InversionCodeViewProps {
   activeLine: number | null;
   height: number;
-  mode: 'SEND' | 'FRONT' | 'RECEIVE';
+  activeTab: 'take' | 'inherit' | 'disinherit';
 }
 
-const QueueCodeView: React.FC<QueueCodeViewProps> = ({ activeLine, height, mode }) => {
+const InversionCodeView: React.FC<InversionCodeViewProps> = ({ activeLine, height, activeTab }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const codeData = mode === 'FRONT' ? QUEUE_CODE_FRONT : 
-                   mode === 'RECEIVE' ? QUEUE_CODE_RECEIVE : 
-                   QUEUE_CODE_SEND;
+  
+  const codeData = activeTab === 'take' ? MUTEX_TAKE_CODE : 
+                   activeTab === 'inherit' ? INHERIT_LOGIC_CODE : 
+                   DISINHERIT_LOGIC_CODE;
 
   useEffect(() => {
     if (activeLine !== null && scrollRef.current) {
-        const lineEl = document.getElementById(`q-line-${activeLine}`);
+        const lineEl = document.getElementById(`inv-line-${activeLine}`);
         if (lineEl) {
             lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }
-  }, [activeLine, mode]);
+  }, [activeLine, activeTab]);
 
   return (
     <div style={{ height }} className="flex flex-col bg-[#0f172a] font-mono text-sm relative border-t border-slate-800 z-10">
        <div className="h-9 bg-[#1e293b] flex items-center border-b border-slate-700/50 shrink-0 select-none px-4 gap-2">
             <Code2 size={14} className="text-sky-500"/> 
-            <span className="font-bold text-xs text-sky-400">queue.c</span>
+            <span className="font-bold text-xs text-sky-400">tasks.c / queue.c</span>
             <span className="text-[10px] text-slate-500 mx-2">|</span>
-            <span className={`text-[10px] font-bold ${mode === 'FRONT' ? 'text-rose-400' : mode === 'RECEIVE' ? 'text-emerald-400' : 'text-indigo-400'}`}>
-                {mode === 'FRONT' ? 'xQueueSendToFront (Urgent)' : mode === 'RECEIVE' ? 'xQueueReceive' : 'xQueueSendToBack (Standard)'}
+            <span className={`text-[10px] font-bold ${activeTab === 'inherit' ? 'text-rose-400' : 'text-slate-300'}`}>
+                {activeTab === 'take' ? 'pvTaskIncrementMutexHeldCount' : activeTab === 'inherit' ? 'xTaskPriorityInherit' : 'xTaskPriorityDisinherit'}
             </span>
        </div>
 
@@ -40,7 +40,7 @@ const QueueCodeView: React.FC<QueueCodeViewProps> = ({ activeLine, height, mode 
             {codeData.map((line, idx) => {
                 const isActive = activeLine === line.line;
                 return (
-                    <div key={idx} id={`q-line-${line.line}`} className={`flex ${isActive ? 'bg-sky-900/20 -mx-2 px-2' : ''}`}>
+                    <div key={idx} id={`inv-line-${line.line}`} className={`flex ${isActive ? 'bg-sky-900/20 -mx-2 px-2' : ''}`}>
                         <div className={`w-8 text-right pr-3 select-none shrink-0 text-[10px] ${isActive ? 'text-sky-500 font-bold' : 'text-slate-600'}`}>{line.line}</div>
                         <div className="flex-1 whitespace-pre truncate text-xs leading-5">
                             {line.type === 'comment' ? <span className="text-emerald-600 italic">{line.text}</span> :
@@ -59,4 +59,4 @@ const QueueCodeView: React.FC<QueueCodeViewProps> = ({ activeLine, height, mode 
   );
 };
 
-export default QueueCodeView;
+export default InversionCodeView;

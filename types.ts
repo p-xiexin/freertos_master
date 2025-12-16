@@ -1,3 +1,4 @@
+
 export enum TaskState {
   RUNNING = 'RUNNING',
   READY = 'READY',
@@ -27,7 +28,8 @@ export enum ChapterId {
   SCHEDULER = 'scheduler',
   CONTEXT = 'context',
   QUEUES = 'queues',
-  SEMAPHORES = 'semaphores'
+  SEMAPHORES = 'semaphores',
+  INVERSION = 'inversion'
 }
 
 export interface ChatMessage {

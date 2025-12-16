@@ -1,14 +1,14 @@
 
 import React, { useRef, useLayoutEffect, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cpu, Zap, Timer, Shield, ShieldAlert, ArrowDown, Layers, Clock, Activity, Hash, Terminal, FastForward } from 'lucide-react';
+import { Cpu, Zap, Timer, Shield, ShieldAlert, ArrowDown, Layers, Clock, Activity, Hash, Terminal, FastForward, ArrowRight } from 'lucide-react';
 import { SimTask } from '../../data/schedulerData';
 import DebugToolbar from '../DebugToolbar';
 
 interface SchedulerVisualizerProps {
   tickCount: number;
   tasks: SimTask[];
-  currentTaskId: number;
+  currentTaskId: number | null;
   isRunning: boolean;
   onToggleRun: () => void;
   onStepTick: () => void;
@@ -39,10 +39,16 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
   isFastForwarding = false
 }) => {
   
-  const priorities = [2, 1, 0];
-  const getTaskInReady = (prio: number) => tasks.filter(t => t.priority === prio && t.state === 'READY');
-  const runningTask = tasks.find(t => t.id === currentTaskId);
+  const priorities = [4, 3, 2, 1, 0];
   const blockedTasks = tasks.filter(t => t.state === 'BLOCKED');
+  const runningTask = tasks.find(t => t.id === currentTaskId);
+  
+  // Get Ready tasks sorted by insertOrder (FIFO)
+  const getSortedReadyTasks = (prio: number) => {
+      return tasks
+        .filter(t => t.priority === prio && t.state === 'READY')
+        .sort((a, b) => a.insertOrder - b.insertOrder);
+  };
   
   // Refs for dynamic line drawing
   const containerRef = useRef<HTMLDivElement>(null);
@@ -81,7 +87,7 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
 
             // Start from the RIGHT side of the button
             const startX = btnCenterX + btnRadius - cont.left;
-            const startY = btnCenterY - cont.top;
+            const startY = btnCenterY - cont.top; 
             
             // Target the bottom-center of the CPU
             const endX = (cpu.left + cpu.width / 2) - cont.left; 
@@ -164,8 +170,8 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
          canFinish={false}
        />
 
-       {/* Floating Tick Counter (Top Right) */}
-       <div className="absolute top-6 right-6 z-40 flex flex-col gap-2">
+       {/* Floating Tick Counter (Moved to Top Left) */}
+       <div className="absolute top-6 left-6 z-40 flex flex-col gap-2">
            
            {/* Primary: RTOS Tick */}
            <motion.div 
@@ -201,7 +207,7 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
            </motion.div>
 
            {/* Secondary: CPU Cycles (Simulated High Res) */}
-           <div className="bg-slate-950/80 backdrop-blur border border-slate-800 rounded-lg px-4 py-2 flex items-center gap-3 opacity-80 hover:opacity-100 transition-opacity">
+           <div className="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-lg px-4 py-2 flex items-center gap-3 opacity-80 hover:opacity-100 transition-opacity">
                 <div className="bg-slate-900 p-1.5 rounded border border-slate-800">
                     <Hash size={14} className="text-slate-500"/>
                 </div>
@@ -254,49 +260,81 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
        </div>
 
        {/* Main Stage */}
-       <div className="flex-1 flex items-center justify-center p-8 gap-20 relative z-10 w-full max-w-[1400px] mx-auto">
+       <div className="flex-1 flex items-center justify-center p-8 gap-16 relative z-10 w-full max-w-[1400px] mx-auto">
             
-            {/* LEFT: Ready Lists */}
-            <div className="flex flex-col gap-6 w-72">
+            {/* LEFT: Ready Lists (Queue Visualization) */}
+            <div className="flex flex-col gap-3 w-[420px]">
                 <div className="flex items-center gap-2 mb-2">
                     <div className="p-1.5 bg-indigo-500/10 rounded border border-indigo-500/20">
                         <Zap size={14} className="text-indigo-400"/>
                     </div>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ready Queue</span>
+                    <div>
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest block">pxReadyTasksLists</span>
+                        <span className="text-[9px] text-slate-500">Array of Linked Lists</span>
+                    </div>
                 </div>
                 
-                {priorities.map(p => (
-                    <div key={p} className="relative group">
-                        <div className="absolute -left-3 top-1/2 -translate-y-1/2 -translate-x-full pr-3 flex items-center">
-                            <span className="text-[10px] font-mono text-slate-600">PRI {p}</span>
-                            <div className="w-2 h-[1px] bg-slate-700 ml-2"/>
-                        </div>
-                        <div className="bg-[#13141f] border border-slate-800 rounded-xl p-1.5 min-h-[64px] flex items-center relative shadow-inner overflow-hidden">
-                            {getTaskInReady(p).length === 0 && (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="w-full h-[1px] bg-slate-800/50 dashed-line"/>
+                {priorities.map(p => {
+                    const queueTasks = getSortedReadyTasks(p);
+                    const isActiveQueue = queueTasks.length > 0;
+                    
+                    return (
+                        <div key={p} className="flex items-center gap-2">
+                            {/* List Head Label */}
+                            <div className={`w-14 text-right text-[10px] font-mono shrink-0 ${isActiveQueue ? 'text-slate-300 font-bold' : 'text-slate-600'}`}>
+                                PRI {p}
+                            </div>
+                            
+                            {/* Queue Container */}
+                            <div className={`
+                                flex-1 flex items-center bg-[#13141f] border rounded-lg p-1.5 h-14 relative shadow-inner overflow-hidden
+                                ${isActiveQueue ? 'border-slate-700' : 'border-slate-800/50'}
+                            `}>
+                                {/* List Head Marker */}
+                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-800/50 border-r border-slate-700/50 flex items-center justify-center">
+                                   <div className="w-[2px] h-full bg-slate-600/20"/>
                                 </div>
-                            )}
-                            <AnimatePresence mode="popLayout">
-                                {getTaskInReady(p).map(task => (
-                                    <motion.div
-                                        key={task.id}
-                                        layoutId={`task-${task.id}`}
-                                        initial={{ opacity: 0, scale: 0.8, x: -40 }}
-                                        animate={{ opacity: 1, scale: 1, x: 0 }}
-                                        exit={{ opacity: 0, scale: 0.8, x: 40 }}
-                                        className={`relative flex-shrink-0 w-full h-12 rounded-lg ${task.color} flex items-center justify-between px-3 mr-2 z-10 border border-white/10`}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-white"/>
-                                            <span className="text-xs font-bold text-white">{task.name}</span>
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </AnimatePresence>
+                                
+                                <div className="flex items-center gap-1 pl-2 w-full overflow-hidden">
+                                     <AnimatePresence mode="popLayout">
+                                        {queueTasks.map((task, idx) => (
+                                            <motion.div
+                                                key={task.id}
+                                                layoutId={`task-node-${task.id}`}
+                                                initial={{ opacity: 0, scale: 0.8, x: -20 }}
+                                                animate={{ opacity: 1, scale: 1, x: 0 }}
+                                                exit={{ opacity: 0, scale: 0.8, x: 20 }}
+                                                className="flex items-center"
+                                            >
+                                                {/* Task Node */}
+                                                <div className={`
+                                                    relative w-24 h-10 rounded-md ${task.color} border border-white/10 flex items-center justify-between px-2 shadow-lg
+                                                    ${task.id === currentTaskId ? 'ring-2 ring-white/50' : ''}
+                                                `}>
+                                                    <span className="text-[10px] font-bold text-white truncate w-14">{task.name}</span>
+                                                    <span className="text-[9px] font-mono text-white/70 opacity-50">#{task.id}</span>
+                                                    
+                                                    {/* Running Indicator */}
+                                                    {task.id === currentTaskId && (
+                                                        <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50"/>
+                                                    )}
+                                                </div>
+
+                                                {/* Link Arrow */}
+                                                <div className="text-slate-600 mx-1">
+                                                    <ArrowRight size={12}/>
+                                                </div>
+                                            </motion.div>
+                                        ))}
+                                    </AnimatePresence>
+                                    
+                                    {/* Tail / Empty Marker */}
+                                    <div className="text-[9px] text-slate-700 italic font-mono opacity-50">NULL</div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             {/* CENTER: CPU Core */}
@@ -335,7 +373,7 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
 
                       {/* Main Execution Unit */}
                       <div className="flex-1 p-4 relative flex flex-col items-center justify-center">
-                          <div className={`absolute inset-0 transition-opacity duration-300 ${runningTask ? 'opacity-10' : 'opacity-0'} ${runningTask?.color.replace('bg-', 'bg-')}`}/>
+                          <div className={`absolute inset-0 transition-opacity duration-300 ${runningTask ? 'opacity-10' : 'opacity-0'} ${runningTask?.color.replace('bg-', 'bg-') || ''}`}/>
                           
                           <div className="w-full h-full border border-dashed border-slate-700 rounded-xl flex items-center justify-center relative bg-black/20">
                                 <AnimatePresence mode="wait">
@@ -380,7 +418,7 @@ const SchedulerVisualizer: React.FC<SchedulerVisualizerProps> = ({
                                             className="flex flex-col items-center text-slate-600"
                                         >
                                             <Layers size={24} className="mb-2 opacity-50"/>
-                                            <span className="text-[10px] font-mono uppercase">Context Switch</span>
+                                            <span className="text-[10px] font-mono uppercase">System / Context Switch</span>
                                         </motion.div>
                                     )}
                                 </AnimatePresence>

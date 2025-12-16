@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
-import { Code2, FileCode, Layers, Zap, Terminal } from 'lucide-react';
-import { TASKS_C_CODE, getLedTaskCode, getUartTaskCode, ISR_CODE } from '../../data/schedulerData';
+import { Code2, FileCode, Layers, Zap, Terminal, Settings } from 'lucide-react';
+import { KERNEL_TASKS_CODE, PORT_CODE, getLedTaskCode, getUartTaskCode, ISR_CODE } from '../../data/schedulerData';
 
 interface SchedulerCodeViewProps {
   activeTabOverride?: string; 
@@ -10,8 +10,10 @@ interface SchedulerCodeViewProps {
   uartLog?: string;
 }
 
-const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ activeTabOverride, activeLine, height, uartLog }) => {
-  const [activeTab, setActiveTab] = useState<'kernel' | 'led' | 'uart' | 'isr' | 'log'>('kernel');
+const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ 
+    activeTabOverride, activeLine, height, uartLog 
+}) => {
+  const [activeTab, setActiveTab] = useState<'port' | 'kernel' | 'led' | 'uart' | 'isr' | 'log'>('port');
   const scrollRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +40,8 @@ const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ activeTabOverride
 
   const getCode = () => {
     switch(activeTab) {
-        case 'kernel': return TASKS_C_CODE;
+        case 'port': return PORT_CODE;
+        case 'kernel': return KERNEL_TASKS_CODE;
         case 'led': return getLedTaskCode(4);
         case 'uart': return getUartTaskCode(2);
         case 'isr': return ISR_CODE;
@@ -51,6 +54,15 @@ const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ activeTabOverride
        
        {/* Tabs Header */}
        <div className="h-9 bg-[#1e293b] flex items-center border-b border-slate-700/50 shrink-0 select-none overflow-x-auto custom-scrollbar">
+          
+          <button 
+            onClick={() => setActiveTab('port')}
+            className={`flex items-center gap-2 px-4 h-full border-r border-slate-700/50 transition-colors hover:bg-slate-800 ${activeTab === 'port' ? 'bg-slate-800 text-orange-400' : 'text-slate-500'}`}
+          >
+            <Settings size={14} className={activeTab === 'port' ? 'text-orange-500' : 'text-slate-500'}/> 
+            <span className="font-bold text-xs whitespace-nowrap">port.c</span>
+          </button>
+
           <button 
             onClick={() => setActiveTab('kernel')}
             className={`flex items-center gap-2 px-4 h-full border-r border-slate-700/50 transition-colors hover:bg-slate-800 ${activeTab === 'kernel' ? 'bg-slate-800 text-yellow-400' : 'text-slate-500'}`}
@@ -107,9 +119,14 @@ const SchedulerCodeView: React.FC<SchedulerCodeViewProps> = ({ activeTabOverride
                 <div className="p-2">
                     {getCode().map((line, idx) => {
                         const isActive = activeLine === line.line;
+                        
                         return (
-                            <div key={idx} id={`sch-line-${line.line}`} className={`flex ${isActive ? 'bg-sky-900/20 -mx-2 px-2' : ''}`}>
-                                <div className={`w-8 text-right pr-3 select-none shrink-0 text-[10px] ${isActive ? 'text-sky-500 font-bold' : 'text-slate-600'}`}>{line.line}</div>
+                            <div key={idx} id={`sch-line-${line.line}`} className={`flex group ${isActive ? 'bg-sky-900/20 -mx-2 px-2' : ''}`}>
+                                {/* Gutter */}
+                                <div className="w-8 text-right pr-3 select-none shrink-0 text-[10px] flex items-center justify-end">
+                                    <span className={`${isActive ? 'text-sky-500 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>{line.line}</span>
+                                </div>
+                                
                                 <div className="flex-1 whitespace-pre truncate text-xs leading-5">
                                     {line.type === 'comment' ? <span className="text-emerald-600 italic">{line.text}</span> :
                                         line.type === 'keyword' ? <span className="text-purple-400">{line.text}</span> :

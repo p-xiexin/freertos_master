@@ -1,0 +1,37 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main  # 只在 main 分支推送时触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 设置 Node.js 环境
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'  # 可以根据需要修改 Node.js 版本
+
+      # 安装依赖
+      - name: Install dependencies
+        run: |
+          npm install
+
+      # 构建项目
+      - name: Build project
+        run: |
+          npm run build
+
+      # 部署到 GitHub Pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist  # 对于 SvelteKit 项目是 build 目录，传统 Svelte 项目是 dist 目录
